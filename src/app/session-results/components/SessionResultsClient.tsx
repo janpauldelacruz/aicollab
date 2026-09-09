@@ -8,6 +8,7 @@ import ResultsSummaryTab from './ResultsSummaryTab';
 import ResultsTranscriptTab from './ResultsTranscriptTab';
 import ResultsArtifactsTab from './ResultsArtifactsTab';
 import ResultsAnalyticsTab from './ResultsAnalyticsTab';
+import ExportModal from './ExportModal';
 
 const TABS = [
   { id: 'tab-summary', label: 'Summary', icon: 'DocumentTextIcon' },
@@ -18,6 +19,7 @@ const TABS = [
 
 export default function SessionResultsClient() {
   const [activeTab, setActiveTab] = useState('tab-summary');
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -43,9 +45,9 @@ export default function SessionResultsClient() {
             <Icon name="ShareIcon" size={14} />
             Share
           </button>
-          <button onClick={() => toast.success('Full session exported as ZIP')} className="btn-primary text-xs gap-1.5">
+          <button onClick={() => setExportModalOpen(true)} className="btn-primary text-xs gap-1.5">
             <Icon name="ArrowDownTrayIcon" size={14} />
-            Export All
+            Export Transcript
           </button>
         </div>
       </div>
@@ -75,6 +77,14 @@ export default function SessionResultsClient() {
       {activeTab === 'tab-transcript' && <ResultsTranscriptTab />}
       {activeTab === 'tab-artifacts' && <ResultsArtifactsTab />}
       {activeTab === 'tab-analytics' && <ResultsAnalyticsTab />}
+
+      {/* Export modal */}
+      {exportModalOpen && (
+        <ExportModal
+          sessionName="SaaS MVP Architecture"
+          onClose={() => setExportModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'New Session', href: '/session-setup', icon: 'PlusCircleIcon', group: 'main' },
   { label: 'Agent Templates', href: '/agent-templates', icon: 'CpuIcon', group: 'library' },
   { label: 'Session Results', href: '/session-results', icon: 'BarChart2Icon', group: 'library' },
+  { label: 'Past Collaborations', href: '/past-collaborations', icon: 'ClockIcon', group: 'library' },
 ];
 
 interface SidebarProps {
