@@ -7,6 +7,7 @@ import AppLogo from '@/components/ui/AppLogo';
 import ChatFeed from './ChatFeed';
 import ArtifactSidebar from './ArtifactSidebar';
 import AgentStatusBar from './AgentStatusBar';
+import SessionDeliveryModal from './SessionDeliveryModal';
 import { REAL_AI_AGENTS, getAgentResponse, buildAgentFromConfig } from '@/lib/ai/multiAgentChat';
 import type { AIAgent, AgentMessage } from '@/lib/ai/multiAgentChat';
 import { useAuth } from '@/contexts/AuthContext';
@@ -87,6 +88,7 @@ export default function LiveChatroomClient() {
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
 
   // Active AI agents — prefer session config agents, fall back to default 3
   const [activeAIAgents, setActiveAIAgents] = useState<AIAgent[]>(REAL_AI_AGENTS);
@@ -295,6 +297,7 @@ export default function LiveChatroomClient() {
       setSessionStatus('stopped');
       activeAIAgentsRef.current.forEach((a) => updateAgentStatus(a.id, 'idle'));
       toast.success('Session complete — all turns used. View results!');
+      setDeliveryModalOpen(true);
     }
   }, [turnCount, sessionStatus, updateAgentStatus]);
 
@@ -369,6 +372,7 @@ export default function LiveChatroomClient() {
       trackEvent('session_stop', user.id, sessionId, { turn_count: turnCount, completion_pct: completionPct });
       trackGAEvent('session_stop', { session_id: sessionId, completion_pct: completionPct });
     }
+    setDeliveryModalOpen(true);
   };
 
   return (
@@ -433,6 +437,12 @@ export default function LiveChatroomClient() {
             <button onClick={handleStop} className="btn-danger text-xs gap-1.5 py-1.5">
               <Icon name="StopIcon" size={14} />
               Stop
+            </button>
+          )}
+          {sessionStatus === 'stopped' && (
+            <button onClick={() => setDeliveryModalOpen(true)} className="btn-primary text-xs gap-1.5 py-1.5">
+              <Icon name="TrophyIcon" size={14} />
+              View Results
             </button>
           )}
 
@@ -537,6 +547,20 @@ export default function LiveChatroomClient() {
           </div>
         )}
       </div>
+
+      {/* Session delivery modal */}
+      {deliveryModalOpen && (
+        <SessionDeliveryModal
+          topic={topic}
+          messages={messages}
+          artifacts={artifacts}
+          agents={agents}
+          elapsedSeconds={elapsedSeconds}
+          turnCount={turnCount}
+          maxTurns={MAX_TURNS}
+          onClose={() => setDeliveryModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
