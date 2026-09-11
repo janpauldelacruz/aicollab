@@ -6,6 +6,9 @@ import Icon from '@/components/ui/AppIcon';
 import Step1SessionConfig from './Step1SessionConfig';
 import Step2AgentRoster from './Step2AgentRoster';
 import Step3ReviewLaunch from './Step3ReviewLaunch';
+import { useAuth } from '@/contexts/AuthContext';
+import { createSession } from '@/lib/supabase/sessionService';
+import { trackEvent } from '@/lib/supabase/sessionService';
 
 export type SessionMode = 'brainstorm' | 'code' | 'build' | 'chat';
 export type AgentRole = 'brainstormer' | 'coder' | 'pm' | 'designer' | 'critic' | 'researcher' | 'architect';
@@ -54,17 +57,41 @@ export default function SessionSetupClient() {
   const [config, setConfig] = useState<SessionConfig>(DEFAULT_CONFIG);
   const [isLaunching, setIsLaunching] = useState(false);
   const router = useRouter();
+  const { user } = useAuth();
 
   const handleLaunch = async () => {
     setIsLaunching(true);
-    // Save agents to sessionStorage so LiveChatroomClient can pick them up
-    if (typeof window !== 'undefined' && config.agents.length >= 2) {
-      window.sessionStorage.setItem('sessionAgents', JSON.stringify(config.agents));
+    try {
+      // Save agents to sessionStorage so LiveChatroomClient can pick them up
+      if (typeof window !== 'undefined' && config.agents.length >= 2) {
+        window.sessionStorage.setItem('sessionAgents', JSON.stringify(config.agents));
+      }
+
+      // Persist session to Supabase if user is logged in
+      let sessionId: string | null = null;
+      if (user) {
+        const dbSession = await createSession(config, user.id);
+        if (dbSession) {
+          sessionId = dbSession.id;
+          if (typeof window !== 'undefined') {
+            window.sessionStorage.setItem('currentSessionId', dbSession.id);
+          }
+          await trackEvent('session_start', user.id, dbSession.id, {
+            mode: config.mode,
+            agentCount: config.agents.length,
+            topic: config.topic,
+            models: config.agents.map((a) => a.model),
+          });
+        }
+      }
+
+      toast.success(`Session "${config.name}" launched! Agents are initializing…`);
+      router.push('/live-chatroom');
+    } catch (err: any) {
+      toast.error(`Failed to launch session: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsLaunching(false);
     }
-    // BACKEND INTEGRATION: POST /api/sessions — create session with config, then redirect to live chatroom
-    await new Promise((r) => setTimeout(r, 1500));
-    toast.success(`Session "${config.name}" launched! Agents are initializing…`);
-    router.push('/live-chatroom');
   };
 
   return (

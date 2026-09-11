@@ -1,7 +1,6 @@
 'use client';
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { toast } from 'sonner';
 import Icon from '@/components/ui/AppIcon';
 import { ModeBadge, SessionStatusBadge } from '@/components/ui/StatusBadge';
 import ResultsSummaryTab from './ResultsSummaryTab';
@@ -41,10 +40,10 @@ export default function SessionResultsClient() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => toast.success('Session report copied to clipboard')} className="btn-secondary text-xs gap-1.5">
+          <Link href="/share-session" className="btn-secondary text-xs gap-1.5">
             <Icon name="ShareIcon" size={14} />
             Share
-          </button>
+          </Link>
           <button onClick={() => setExportModalOpen(true)} className="btn-primary text-xs gap-1.5">
             <Icon name="ArrowDownTrayIcon" size={14} />
             Export Transcript

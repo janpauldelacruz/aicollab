@@ -9,6 +9,13 @@ import ArtifactSidebar from './ArtifactSidebar';
 import AgentStatusBar from './AgentStatusBar';
 import { REAL_AI_AGENTS, getAgentResponse, buildAgentFromConfig } from '@/lib/ai/multiAgentChat';
 import type { AIAgent, AgentMessage } from '@/lib/ai/multiAgentChat';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  updateSessionStatus,
+  insertMessage,
+  trackEvent,
+} from '@/lib/supabase/sessionService';
+import { trackGAEvent } from '@/components/Analytics';
 
 export type AgentRole = 'pm' | 'coder' | 'designer' | 'critic' | 'architect' | 'brainstormer' | 'researcher';
 
@@ -103,6 +110,13 @@ export default function LiveChatroomClient() {
   const [isAgentResponding, setIsAgentResponding] = useState(false);
   const [turnCount, setTurnCount] = useState(0);
   const MAX_TURNS = 50;
+  const { user } = useAuth();
+
+  // Get current session ID from sessionStorage
+  const getCurrentSessionId = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    return window.sessionStorage.getItem('currentSessionId');
+  };
 
   const sessionStatusRef = useRef(sessionStatus);
   const isAgentRespondingRef = useRef(isAgentResponding);
@@ -204,6 +218,22 @@ export default function LiveChatroomClient() {
       setMessages((prev) => [...prev, newMessage]);
       incrementAgentMessageCount(aiAgent.id);
 
+      // Persist message to Supabase
+      const sessionId = getCurrentSessionId();
+      if (sessionId && user) {
+        insertMessage(sessionId, {
+          agentId: aiAgent.id,
+          agentName: aiAgent.name,
+          agentRole: aiAgent.role,
+          agentColor: aiAgent.color,
+          content: response,
+          type: 'message',
+          elapsedSeconds,
+        });
+        trackEvent('agent_turn', user.id, sessionId, {}, aiAgent.model, aiAgent.name);
+        trackGAEvent('agent_turn', { model: aiAgent.model, agent_name: aiAgent.name });
+      }
+
       // Update conversation history
       const historyEntry: AgentMessage = {
         role: 'assistant',
@@ -288,23 +318,57 @@ export default function LiveChatroomClient() {
 
     setSessionStatus('running');
     toast.success('Session started — AI agents are connecting…');
+
+    // Persist status to Supabase
+    const sessionId = getCurrentSessionId();
+    if (sessionId && user) {
+      updateSessionStatus(sessionId, 'running');
+      trackEvent('session_start', user.id, sessionId, { topic: activeTopic });
+      trackGAEvent('session_start', { session_id: sessionId, topic: activeTopic });
+    }
   };
 
   const handlePause = () => {
     setSessionStatus('paused');
     activeAIAgentsRef.current.forEach((a) => updateAgentStatus(a.id, 'idle'));
     toast.info('Session paused — agents will finish current turn then wait');
+
+    const sessionId = getCurrentSessionId();
+    if (sessionId && user) {
+      updateSessionStatus(sessionId, 'paused', { elapsed_seconds: elapsedSeconds, turn_count: turnCount });
+      trackEvent('session_pause', user.id, sessionId, {});
+    }
   };
 
   const handleResume = () => {
     setSessionStatus('running');
     toast.success('Session resumed');
+
+    const sessionId = getCurrentSessionId();
+    if (sessionId && user) {
+      updateSessionStatus(sessionId, 'running');
+      trackEvent('session_resume', user.id, sessionId, {});
+    }
   };
 
   const handleStop = () => {
     setSessionStatus('stopped');
     activeAIAgentsRef.current.forEach((a) => updateAgentStatus(a.id, 'idle'));
     toast.success('Session stopped — results are being compiled');
+
+    const sessionId = getCurrentSessionId();
+    const completionPct = MAX_TURNS > 0 ? Math.min(100, Math.round((turnCount / MAX_TURNS) * 100)) : 0;
+    if (sessionId && user) {
+      updateSessionStatus(sessionId, 'stopped', {
+        elapsed_seconds: elapsedSeconds,
+        turn_count: turnCount,
+        message_count: messages.length,
+        artifact_count: artifacts.length,
+        completion_pct: completionPct,
+      });
+      trackEvent('session_stop', user.id, sessionId, { turn_count: turnCount, completion_pct: completionPct });
+      trackGAEvent('session_stop', { session_id: sessionId, completion_pct: completionPct });
+    }
   };
 
   return (
