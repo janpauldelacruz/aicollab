@@ -20,6 +20,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Session Results', href: '/session-results', icon: 'BarChart2Icon', group: 'library' },
   { label: 'Past Collaborations', href: '/past-collaborations', icon: 'ClockIcon', group: 'library' },
   { label: 'Share Session', href: '/share-session', icon: 'ShareIcon', group: 'library' },
+  { label: 'Account Settings', href: '/account-settings', icon: 'SettingsIcon', group: 'account' },
 ];
 
 interface SidebarProps {
@@ -32,6 +33,7 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, mobileOpen, onMobileClose, activeRoute }: SidebarProps) {
   const mainItems = NAV_ITEMS.filter((i) => i.group === 'main');
   const libraryItems = NAV_ITEMS.filter((i) => i.group === 'library');
+  const accountItems = NAV_ITEMS.filter((i) => i.group === 'account');
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = activeRoute === item.href;
@@ -103,6 +105,12 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, activeRo
           {libraryItems.map((item) => (
             <NavLink key={`nav-${item.href}`} item={item} />
           ))}
+
+          <div className={`my-3 border-t border-border ${collapsed ? 'mx-1' : 'mx-0'}`} />
+
+          {accountItems.map((item) => (
+            <NavLink key={`nav-${item.href}`} item={item} />
+          ))}
         </nav>
 
         {/* Bottom user section */}
@@ -150,6 +158,12 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, activeRo
           <p className="px-3 py-2 text-xs font-medium uppercase tracking-widest text-muted-foreground/60">Library</p>
           {libraryItems.map((item) => (
             <NavLink key={`mobile-nav-lib-${item.href}`} item={item} />
+          ))}
+
+          <div className={`my-3 border-t border-border ${collapsed ? 'mx-1' : 'mx-0'}`} />
+
+          {accountItems.map((item) => (
+            <NavLink key={`mobile-nav-acc-${item.href}`} item={item} />
           ))}
         </nav>
       </aside>
