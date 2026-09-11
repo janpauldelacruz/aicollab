@@ -7,7 +7,7 @@ import AppLogo from '@/components/ui/AppLogo';
 import ChatFeed from './ChatFeed';
 import ArtifactSidebar from './ArtifactSidebar';
 import AgentStatusBar from './AgentStatusBar';
-import { REAL_AI_AGENTS, getAgentResponse } from '@/lib/ai/multiAgentChat';
+import { REAL_AI_AGENTS, getAgentResponse, buildAgentFromConfig } from '@/lib/ai/multiAgentChat';
 import type { AIAgent, AgentMessage } from '@/lib/ai/multiAgentChat';
 
 export type AgentRole = 'pm' | 'coder' | 'designer' | 'critic' | 'architect' | 'brainstormer' | 'researcher';
@@ -59,24 +59,36 @@ function formatTimestamp(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-const AGENT_ROLE_MAP: Record<string, AgentRole> = {
-  'agent-claude': 'architect',
-  'agent-gemini': 'researcher',
-  'agent-gpt': 'coder',
-};
-
 const DEFAULT_TOPIC = 'Build a modern SaaS product together — discuss architecture, features, and implementation';
+
+/** Try to read session config agents from sessionStorage (set by session-setup flow) */
+function loadSessionAgents(): AIAgent[] | null {
+  try {
+    const raw = typeof window !== 'undefined' ? window.sessionStorage.getItem('sessionAgents') : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length < 2) return null;
+    const names = parsed.map((a: any) => a.name);
+    return parsed.map((a: any) => buildAgentFromConfig(a, names));
+  } catch {
+    return null;
+  }
+}
 
 export default function LiveChatroomClient() {
   const [sessionStatus, setSessionStatus] = useState<'idle' | 'running' | 'paused' | 'stopped'>('idle');
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  // Active AI agents — prefer session config agents, fall back to default 3
+  const [activeAIAgents, setActiveAIAgents] = useState<AIAgent[]>(REAL_AI_AGENTS);
+
   const [agents, setAgents] = useState<LiveAgent[]>(
     REAL_AI_AGENTS.map((a) => ({
       id: a.id,
       name: a.name,
-      role: AGENT_ROLE_MAP[a.id] as AgentRole,
+      role: a.role as AgentRole,
       model: a.model,
       status: 'idle' as const,
       messageCount: 0,
@@ -97,12 +109,33 @@ export default function LiveChatroomClient() {
   const currentAgentIndexRef = useRef(currentAgentIndex);
   const conversationHistoryRef = useRef(conversationHistory);
   const turnCountRef = useRef(turnCount);
+  const activeAIAgentsRef = useRef(activeAIAgents);
 
   sessionStatusRef.current = sessionStatus;
   isAgentRespondingRef.current = isAgentResponding;
   currentAgentIndexRef.current = currentAgentIndex;
   conversationHistoryRef.current = conversationHistory;
   turnCountRef.current = turnCount;
+  activeAIAgentsRef.current = activeAIAgents;
+
+  // Load session agents from sessionStorage on mount
+  useEffect(() => {
+    const sessionAgents = loadSessionAgents();
+    if (sessionAgents && sessionAgents.length >= 2) {
+      setActiveAIAgents(sessionAgents);
+      setAgents(
+        sessionAgents.map((a) => ({
+          id: a.id,
+          name: a.name,
+          role: a.role as AgentRole,
+          model: a.model,
+          status: 'idle' as const,
+          messageCount: 0,
+          color: a.color,
+        }))
+      );
+    }
+  }, []);
 
   // Timer
   useEffect(() => {
@@ -130,14 +163,15 @@ export default function LiveChatroomClient() {
       turnCountRef.current >= MAX_TURNS
     ) return;
 
-    const agentIndex = currentAgentIndexRef.current;
-    const aiAgent: AIAgent = REAL_AI_AGENTS[agentIndex];
+    const currentAgents = activeAIAgentsRef.current;
+    const agentIndex = currentAgentIndexRef.current % currentAgents.length;
+    const aiAgent: AIAgent = currentAgents[agentIndex];
 
     setIsAgentResponding(true);
     updateAgentStatus(aiAgent.id, 'thinking');
 
     // Set others to waiting
-    REAL_AI_AGENTS.forEach((a, i) => {
+    currentAgents.forEach((a, i) => {
       if (i !== agentIndex) updateAgentStatus(a.id, 'waiting');
     });
 
@@ -160,7 +194,7 @@ export default function LiveChatroomClient() {
         id: `msg-${Date.now()}-${agentIndex}`,
         agentId: aiAgent.id,
         agentName: aiAgent.name,
-        agentRole: AGENT_ROLE_MAP[aiAgent.id] as AgentRole,
+        agentRole: aiAgent.role as AgentRole,
         agentColor: aiAgent.color,
         content: response,
         timestamp: formatTimestamp(elapsedSeconds),
@@ -178,21 +212,18 @@ export default function LiveChatroomClient() {
       };
       setConversationHistory((prev) => {
         const updated = [...prev, historyEntry];
-        // Keep last 20 messages to avoid token overflow
         return updated.slice(-20);
       });
 
       setTurnCount((t) => t + 1);
-      setCurrentAgentIndex((prev) => (prev + 1) % REAL_AI_AGENTS.length);
+      setCurrentAgentIndex((prev) => (prev + 1) % currentAgents.length);
 
-      // Brief pause before next agent speaks
       await new Promise((resolve) => setTimeout(resolve, 1500));
       updateAgentStatus(aiAgent.id, 'idle');
     } catch (err: any) {
       updateAgentStatus(aiAgent.id, 'idle');
-      REAL_AI_AGENTS.forEach((a) => updateAgentStatus(a.id, 'idle'));
+      currentAgents.forEach((a) => updateAgentStatus(a.id, 'idle'));
       const errMsg = err?.message || 'Unknown error';
-      // If it's an auth/key error or rate limit/no credits, show a warning but skip this agent and continue
       if (
         errMsg.includes('401') ||
         errMsg.includes('API key') ||
@@ -212,9 +243,8 @@ export default function LiveChatroomClient() {
       } else {
         toast.error(`${aiAgent.name} failed to respond: ${errMsg}`);
       }
-      // Advance to next agent so the session doesn't stall
       setTurnCount((t) => t + 1);
-      setCurrentAgentIndex((prev) => (prev + 1) % REAL_AI_AGENTS.length);
+      setCurrentAgentIndex((prev) => (prev + 1) % currentAgents.length);
     } finally {
       setIsAgentResponding(false);
     }
@@ -233,7 +263,7 @@ export default function LiveChatroomClient() {
   useEffect(() => {
     if (turnCount >= MAX_TURNS && sessionStatus === 'running') {
       setSessionStatus('stopped');
-      REAL_AI_AGENTS.forEach((a) => updateAgentStatus(a.id, 'idle'));
+      activeAIAgentsRef.current.forEach((a) => updateAgentStatus(a.id, 'idle'));
       toast.success('Session complete — all turns used. View results!');
     }
   }, [turnCount, sessionStatus, updateAgentStatus]);
@@ -248,11 +278,11 @@ export default function LiveChatroomClient() {
     setElapsedSeconds(0);
     setAgents((prev) => prev.map((a) => ({ ...a, messageCount: 0, status: 'idle' })));
 
-    // Seed conversation with the topic
+    const firstAgent = activeAIAgentsRef.current[0];
     setConversationHistory([
       {
         role: 'user',
-        content: `The collaboration topic is: "${activeTopic}". Claude, please start by sharing your initial thoughts as the Architect.`,
+        content: `The collaboration topic is: "${activeTopic}". ${firstAgent.name}, please start by sharing your initial thoughts as the ${firstAgent.role}.`,
       },
     ]);
 
@@ -262,7 +292,7 @@ export default function LiveChatroomClient() {
 
   const handlePause = () => {
     setSessionStatus('paused');
-    REAL_AI_AGENTS.forEach((a) => updateAgentStatus(a.id, 'idle'));
+    activeAIAgentsRef.current.forEach((a) => updateAgentStatus(a.id, 'idle'));
     toast.info('Session paused — agents will finish current turn then wait');
   };
 
@@ -273,7 +303,7 @@ export default function LiveChatroomClient() {
 
   const handleStop = () => {
     setSessionStatus('stopped');
-    REAL_AI_AGENTS.forEach((a) => updateAgentStatus(a.id, 'idle'));
+    activeAIAgentsRef.current.forEach((a) => updateAgentStatus(a.id, 'idle'));
     toast.success('Session stopped — results are being compiled');
   };
 
@@ -291,8 +321,8 @@ export default function LiveChatroomClient() {
         <div className="flex items-center gap-2 min-w-0">
           <div
             className={`w-2 h-2 rounded-full flex-shrink-0 ${
-              sessionStatus === 'running' ?'bg-positive live-indicator'
-                : sessionStatus === 'paused' ?'bg-warning' :'bg-muted-foreground'
+              sessionStatus === 'running' ? 'bg-positive live-indicator'
+                : sessionStatus === 'paused' ? 'bg-warning' : 'bg-muted-foreground'
             }`}
           />
           <span className="text-sm font-medium text-foreground truncate">
@@ -370,8 +400,8 @@ export default function LiveChatroomClient() {
           {sessionStatus === 'idle' ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-6 px-6">
               <div className="text-center max-w-lg">
-                <div className="flex items-center justify-center gap-3 mb-4">
-                  {REAL_AI_AGENTS.map((a) => (
+                <div className="flex items-center justify-center gap-3 mb-4 flex-wrap">
+                  {activeAIAgents.map((a) => (
                     <div
                       key={a.id}
                       className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold"
@@ -382,8 +412,12 @@ export default function LiveChatroomClient() {
                   ))}
                 </div>
                 <h2 className="text-xl font-bold text-foreground mb-2">AI Collaboration Room</h2>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Claude, Gemini, and ChatGPT will talk to each other in real time. Set a topic and watch them collaborate.
+                <p className="text-sm text-muted-foreground mb-1">
+                  {activeAIAgents.map((a) => a.name).join(', ')} will talk to each other in real time.
+                </p>
+                <p className="text-xs text-muted-foreground mb-6">
+                  Set a topic and watch them collaborate. Configure agents in{' '}
+                  <Link href="/session-setup" className="text-accent hover:underline">Session Setup</Link> to use any AI model.
                 </p>
                 <div className="flex flex-col gap-3 w-full">
                   <div className="flex gap-2">
@@ -417,8 +451,8 @@ export default function LiveChatroomClient() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-6 text-xs text-muted-foreground">
-                {REAL_AI_AGENTS.map((a) => (
+              <div className="flex items-center gap-6 text-xs text-muted-foreground flex-wrap justify-center">
+                {activeAIAgents.map((a) => (
                   <div key={a.id} className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: a.color }} />
                     <span style={{ color: a.color }}>{a.name}</span>

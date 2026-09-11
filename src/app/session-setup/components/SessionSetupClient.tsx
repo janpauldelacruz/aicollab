@@ -9,7 +9,7 @@ import Step3ReviewLaunch from './Step3ReviewLaunch';
 
 export type SessionMode = 'brainstorm' | 'code' | 'build' | 'chat';
 export type AgentRole = 'brainstormer' | 'coder' | 'pm' | 'designer' | 'critic' | 'researcher' | 'architect';
-export type AgentModel = 'gpt-4o' | 'claude-3.5-sonnet' | 'gemini-1.5-pro' | 'llama-3.1-70b' | 'mistral-large';
+export type AgentModel = string;
 
 export interface AgentConfig {
   id: string;
@@ -57,6 +57,10 @@ export default function SessionSetupClient() {
 
   const handleLaunch = async () => {
     setIsLaunching(true);
+    // Save agents to sessionStorage so LiveChatroomClient can pick them up
+    if (typeof window !== 'undefined' && config.agents.length >= 2) {
+      window.sessionStorage.setItem('sessionAgents', JSON.stringify(config.agents));
+    }
     // BACKEND INTEGRATION: POST /api/sessions — create session with config, then redirect to live chatroom
     await new Promise((r) => setTimeout(r, 1500));
     toast.success(`Session "${config.name}" launched! Agents are initializing…`);

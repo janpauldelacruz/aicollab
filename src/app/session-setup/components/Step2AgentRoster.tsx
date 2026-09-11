@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import Icon from '@/components/ui/AppIcon';
 import Modal from '@/components/ui/Modal';
-import type { AgentConfig, AgentRole, AgentModel, SessionMode } from './SessionSetupClient';
+import type { AgentConfig, AgentRole, SessionMode } from './SessionSetupClient';
 
 interface Props {
   agents: AgentConfig[];
@@ -24,12 +24,49 @@ const ROLE_OPTIONS: { value: AgentRole; label: string; description: string; colo
   { value: 'architect', label: 'Architect', description: 'Designs technical systems and structures', color: 'text-blue-400' },
 ];
 
-const MODEL_OPTIONS: { value: AgentModel; label: string; badge: string }[] = [
-  { value: 'gpt-4o', label: 'GPT-4o', badge: 'OpenAI' },
-  { value: 'claude-3.5-sonnet', label: 'Claude 3.5 Sonnet', badge: 'Anthropic' },
-  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', badge: 'Google' },
-  { value: 'llama-3.1-70b', label: 'Llama 3.1 70B', badge: 'Meta' },
-  { value: 'mistral-large', label: 'Mistral Large', badge: 'Mistral' },
+interface ModelOption {
+  value: string;
+  label: string;
+  badge: string;
+  provider: string;
+}
+
+const MODEL_OPTIONS: ModelOption[] = [
+  // OpenAI
+  { value: 'gpt-4o', label: 'GPT-4o', badge: 'OpenAI', provider: 'OPEN_AI' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'OpenAI', provider: 'OPEN_AI' },
+  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', badge: 'OpenAI', provider: 'OPEN_AI' },
+  { value: 'o1-preview', label: 'o1 Preview', badge: 'OpenAI', provider: 'OPEN_AI' },
+  { value: 'o1-mini', label: 'o1 Mini', badge: 'OpenAI', provider: 'OPEN_AI' },
+  // Anthropic
+  { value: 'claude-3.5-sonnet', label: 'Claude 3.5 Sonnet', badge: 'Anthropic', provider: 'ANTHROPIC' },
+  { value: 'claude-3.5-haiku', label: 'Claude 3.5 Haiku', badge: 'Anthropic', provider: 'ANTHROPIC' },
+  { value: 'claude-3-opus', label: 'Claude 3 Opus', badge: 'Anthropic', provider: 'ANTHROPIC' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', badge: 'Anthropic', provider: 'ANTHROPIC' },
+  // Google Gemini
+  { value: 'gemini/gemini-2.5-flash', label: 'Gemini 2.5 Flash', badge: 'Google', provider: 'GEMINI' },
+  { value: 'gemini/gemini-2.5-pro', label: 'Gemini 2.5 Pro', badge: 'Google', provider: 'GEMINI' },
+  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', badge: 'Google', provider: 'GEMINI' },
+  { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', badge: 'Google', provider: 'GEMINI' },
+  // Perplexity
+  { value: 'llama-3.1-sonar-large-128k-online', label: 'Sonar Large (Online)', badge: 'Perplexity', provider: 'PERPLEXITY' },
+  { value: 'llama-3.1-sonar-small-128k-online', label: 'Sonar Small (Online)', badge: 'Perplexity', provider: 'PERPLEXITY' },
+  // Meta / Open Source
+  { value: 'llama-3.1-70b', label: 'Llama 3.1 70B', badge: 'Meta', provider: 'OPEN_AI' },
+  { value: 'llama-3.1-8b', label: 'Llama 3.1 8B', badge: 'Meta', provider: 'OPEN_AI' },
+  // Mistral
+  { value: 'mistral-large', label: 'Mistral Large', badge: 'Mistral', provider: 'OPEN_AI' },
+  { value: 'mistral-medium', label: 'Mistral Medium', badge: 'Mistral', provider: 'OPEN_AI' },
+  // Custom
+  { value: '__custom__', label: 'Custom / Other…', badge: 'Custom', provider: 'CUSTOM' },
+];
+
+const PROVIDER_OPTIONS = [
+  { value: 'OPEN_AI', label: 'OpenAI' },
+  { value: 'ANTHROPIC', label: 'Anthropic' },
+  { value: 'GEMINI', label: 'Google Gemini' },
+  { value: 'PERPLEXITY', label: 'Perplexity' },
+  { value: 'CUSTOM', label: 'Custom / Other' },
 ];
 
 const SUGGESTED_TEAMS: { mode: SessionMode; agents: Omit<AgentConfig, 'id'>[] }[] = [
@@ -40,7 +77,7 @@ const SUGGESTED_TEAMS: { mode: SessionMode; agents: Omit<AgentConfig, 'id'>[] }[
       { name: 'Orion', role: 'architect', model: 'gpt-4o', personality: 'Systematic, thorough, loves clean abstractions', creativity: 65, verbosity: 70, assertiveness: 65, systemPrompt: 'You are a solutions architect who designs robust, scalable systems.' },
       { name: 'Zara', role: 'coder', model: 'gpt-4o', personality: 'Detail-oriented, pragmatic, writes clean code', creativity: 55, verbosity: 60, assertiveness: 55, systemPrompt: 'You are a senior full-stack engineer who writes production-quality code.' },
       { name: 'Lena', role: 'designer', model: 'claude-3.5-sonnet', personality: 'Empathetic, visual, user-obsessed', creativity: 85, verbosity: 65, assertiveness: 60, systemPrompt: 'You are a UX/UI designer focused on user experience and visual clarity.' },
-      { name: 'Rex', role: 'critic', model: 'gemini-1.5-pro', personality: 'Skeptical, rigorous, finds edge cases', creativity: 50, verbosity: 55, assertiveness: 85, systemPrompt: 'You are a critical reviewer who challenges every assumption and finds potential issues.' },
+      { name: 'Rex', role: 'critic', model: 'gemini/gemini-2.5-flash', personality: 'Skeptical, rigorous, finds edge cases', creativity: 50, verbosity: 55, assertiveness: 85, systemPrompt: 'You are a critical reviewer who challenges every assumption and finds potential issues.' },
     ],
   },
 ];
@@ -48,7 +85,10 @@ const SUGGESTED_TEAMS: { mode: SessionMode; agents: Omit<AgentConfig, 'id'>[] }[
 interface AgentFormData {
   name: string;
   role: AgentRole;
-  model: AgentModel;
+  modelSelect: string;
+  customModel: string;
+  customProvider: string;
+  customApiKey: string;
   personality: string;
   systemPrompt: string;
   creativity: number;
@@ -66,33 +106,82 @@ const ROLE_COLORS: Record<AgentRole, string> = {
   architect: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
 };
 
+function getModelBadge(model: string): string {
+  const found = MODEL_OPTIONS.find((m) => m.value === model);
+  if (found && found.value !== '__custom__') return found.badge;
+  return 'Custom';
+}
+
 export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNext }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentConfig | null>(null);
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AgentFormData>({
-    defaultValues: { name: '', role: 'coder', model: 'gpt-4o', personality: '', systemPrompt: '', creativity: 70, verbosity: 60, assertiveness: 65 },
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<AgentFormData>({
+    defaultValues: {
+      name: '', role: 'coder', modelSelect: 'gpt-4o', customModel: '', customProvider: 'OPEN_AI',
+      customApiKey: '', personality: '', systemPrompt: '', creativity: 70, verbosity: 60, assertiveness: 65,
+    },
   });
 
+  const modelSelectVal = watch('modelSelect');
+  const isCustomModel = modelSelectVal === '__custom__';
+
   const openAddModal = () => {
-    reset({ name: '', role: 'coder', model: 'gpt-4o', personality: '', systemPrompt: '', creativity: 70, verbosity: 60, assertiveness: 65 });
+    reset({
+      name: '', role: 'coder', modelSelect: 'gpt-4o', customModel: '', customProvider: 'OPEN_AI',
+      customApiKey: '', personality: '', systemPrompt: '', creativity: 70, verbosity: 60, assertiveness: 65,
+    });
     setEditingAgent(null);
     setModalOpen(true);
   };
 
   const openEditModal = (agent: AgentConfig) => {
-    reset({ name: agent.name, role: agent.role, model: agent.model, personality: agent.personality, systemPrompt: agent.systemPrompt, creativity: agent.creativity, verbosity: agent.verbosity, assertiveness: agent.assertiveness });
+    const knownModel = MODEL_OPTIONS.find((m) => m.value === agent.model && m.value !== '__custom__');
+    reset({
+      name: agent.name,
+      role: agent.role,
+      modelSelect: knownModel ? agent.model : '__custom__',
+      customModel: knownModel ? '' : agent.model,
+      customProvider: (agent as any).provider || 'OPEN_AI',
+      customApiKey: (agent as any).apiKey || '',
+      personality: agent.personality,
+      systemPrompt: agent.systemPrompt,
+      creativity: agent.creativity,
+      verbosity: agent.verbosity,
+      assertiveness: agent.assertiveness,
+    });
     setEditingAgent(agent);
     setModalOpen(true);
   };
 
   const onSubmitAgent = (data: AgentFormData) => {
+    const finalModel = data.modelSelect === '__custom__' ? data.customModel.trim() : data.modelSelect;
+    const modelMeta = MODEL_OPTIONS.find((m) => m.value === data.modelSelect);
+    const finalProvider = data.modelSelect === '__custom__' ? data.customProvider : (modelMeta?.provider || 'OPEN_AI');
+
+    if (!finalModel) {
+      return;
+    }
+
+    const agentData: AgentConfig & { provider?: string; apiKey?: string } = {
+      id: editingAgent?.id || `agent-${Date.now()}`,
+      name: data.name,
+      role: data.role,
+      model: finalModel,
+      personality: data.personality,
+      systemPrompt: data.systemPrompt,
+      creativity: data.creativity,
+      verbosity: data.verbosity,
+      assertiveness: data.assertiveness,
+      provider: finalProvider,
+      ...(data.customApiKey.trim() ? { apiKey: data.customApiKey.trim() } : {}),
+    };
+
     if (editingAgent) {
-      onChange(agents.map((a) => a.id === editingAgent.id ? { ...editingAgent, ...data } : a));
+      onChange(agents.map((a) => a.id === editingAgent.id ? agentData : a));
       toast.success(`Agent "${data.name}" updated`);
     } else {
-      const newAgent: AgentConfig = { id: `agent-${Date.now()}`, ...data };
-      onChange([...agents, newAgent]);
+      onChange([...agents, agentData]);
       toast.success(`Agent "${data.name}" added to roster`);
     }
     setModalOpen(false);
@@ -129,7 +218,7 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Agent Roster</h2>
-          <p className="text-sm text-muted-foreground mt-1">Add agents and assign their roles, models, and personalities</p>
+          <p className="text-sm text-muted-foreground mt-1">Add agents and assign their roles, models, and personalities. Any AI provider or custom model is supported.</p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
           <button type="button" onClick={loadSuggested} className="btn-secondary text-xs gap-1.5">
@@ -170,7 +259,7 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">{agent.name}</p>
-                    <p className="text-xs font-mono text-muted-foreground">{agent.model}</p>
+                    <p className="text-xs font-mono text-muted-foreground truncate max-w-[120px]">{agent.model}</p>
                   </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -182,9 +271,14 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
                   </button>
                 </div>
               </div>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_COLORS[agent.role]}`}>
-                {ROLE_OPTIONS.find(r => r.value === agent.role)?.label}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_COLORS[agent.role]}`}>
+                  {ROLE_OPTIONS.find(r => r.value === agent.role)?.label}
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border border-border bg-muted/30 text-muted-foreground">
+                  {getModelBadge(agent.model)}
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{agent.personality}</p>
               <div className="mt-3 grid grid-cols-3 gap-1">
                 {[
@@ -245,13 +339,57 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
             </div>
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Model</label>
-              <select className="input-base" {...register('model')}>
+              <select className="input-base" {...register('modelSelect')}>
                 {MODEL_OPTIONS.map((m) => (
                   <option key={`model-${m.value}`} value={m.value}>{m.label} — {m.badge}</option>
                 ))}
               </select>
             </div>
           </div>
+
+          {/* Custom model fields */}
+          {isCustomModel && (
+            <div className="rounded-lg border border-accent/30 bg-accent/5 p-4 space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Icon name="CpuChipIcon" size={14} className="text-accent" />
+                <p className="text-xs font-semibold text-accent">Custom Model Configuration</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">Model ID / Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. gpt-4o, mistral-large, llama3"
+                    className="input-base text-xs"
+                    {...register('customModel', { required: isCustomModel ? 'Model ID is required' : false })}
+                  />
+                  {errors.customModel && <p className="text-xs text-negative mt-1">{errors.customModel.message}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">Provider</label>
+                  <select className="input-base text-xs" {...register('customProvider')}>
+                    {PROVIDER_OPTIONS.map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5">
+                  API Key <span className="text-muted-foreground font-normal">(optional — uses server key if blank)</span>
+                </label>
+                <input
+                  type="password"
+                  placeholder="sk-… or leave blank to use server-side key"
+                  className="input-base text-xs font-mono"
+                  {...register('customApiKey')}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  If provided, this key is used only for this agent's requests in this session.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Role</label>
