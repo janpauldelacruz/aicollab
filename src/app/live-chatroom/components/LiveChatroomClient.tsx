@@ -7,6 +7,7 @@ import AppLogo from '@/components/ui/AppLogo';
 import ChatFeed from './ChatFeed';
 import ArtifactSidebar from './ArtifactSidebar';
 import AgentStatusBar from './AgentStatusBar';
+import SessionDeliveryModal from './SessionDeliveryModal';
 import {
   REAL_AI_AGENTS,
   getAgentResponse,
@@ -117,6 +118,7 @@ export default function LiveChatroomClient() {
   const [userInput, setUserInput] = useState('');
   const [pendingDirective, setPendingDirective] = useState<string | null>(null);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
   const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
   const [turnSeconds, setTurnSeconds] = useState(0);
   const [topicInput, setTopicInput] = useState('');
@@ -383,6 +385,7 @@ export default function LiveChatroomClient() {
       setSessionStatus('stopped');
       rosterRef.current.forEach((a) => updateAgentStatus(a.id, 'idle'));
       toast.success('Session complete — all turns used.');
+      setDeliveryModalOpen(true);
       synthesizeDeliverable();
     }
   }, [turnCount, sessionStatus, updateAgentStatus]);
@@ -533,6 +536,7 @@ export default function LiveChatroomClient() {
   const handleStop = () => {
     setSessionStatus('stopped');
     rosterRef.current.forEach((a) => updateAgentStatus(a.id, 'idle'));
+    setDeliveryModalOpen(true);
     synthesizeDeliverable();
   };
 
@@ -608,6 +612,15 @@ export default function LiveChatroomClient() {
           </div>
 
           {/* Controls */}
+          {sessionStatus === 'stopped' && messages.length > 0 && (
+            <button
+              onClick={() => setDeliveryModalOpen(true)}
+              className="btn-secondary text-xs gap-1.5 py-1.5"
+            >
+              <Icon name="DocumentTextIcon" size={13} />
+              View Results
+            </button>
+          )}
           {sessionStatus === 'idle' && (
             <button onClick={handleStart} className="btn-primary text-xs gap-1.5 py-1.5">
               <Icon name="PlayIcon" size={14} />
@@ -808,6 +821,20 @@ export default function LiveChatroomClient() {
             </div>
           )}
         </div>
+
+        {/* Session summary shown when a session ends */}
+        {deliveryModalOpen && (
+          <SessionDeliveryModal
+            topic={topic}
+            messages={messages}
+            artifacts={artifacts}
+            agents={agents}
+            elapsedSeconds={elapsedSeconds}
+            turnCount={turnCount}
+            maxTurns={maxTurns}
+            onClose={() => setDeliveryModalOpen(false)}
+          />
+        )}
 
         {/* Artifact sidebar */}
         {artifactPanelOpen && (

@@ -1,7 +1,7 @@
 'use client';
+import { toast } from 'sonner';
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { toast } from 'sonner';
 import Icon from '@/components/ui/AppIcon';
 import { ModeBadge, SessionStatusBadge } from '@/components/ui/StatusBadge';
 import ResultsSummaryTab from './ResultsSummaryTab';
@@ -16,6 +16,7 @@ import {
 } from '@/lib/session/sessionStore';
 import { useLiveData } from '@/lib/session/useLiveData';
 import type { StoredSession } from '@/lib/session/sessionStore';
+import ExportModal from './ExportModal';
 
 const TABS = [
   { id: 'tab-summary', label: 'Summary', icon: 'DocumentTextIcon' },
@@ -97,6 +98,7 @@ function exportSession(session: StoredSession) {
 export default function SessionResultsClient() {
   const [activeTab, setActiveTab] = useState('tab-summary');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   // Read ?id= after mount so server and client render the same first paint.
   useEffect(() => {
@@ -163,9 +165,17 @@ export default function SessionResultsClient() {
             <Icon name="ArrowPathIcon" size={14} />
             Refresh
           </button>
-          <button onClick={() => exportSession(session)} className="btn-primary text-xs gap-1.5">
+          <Link href="/share-session" className="btn-secondary text-xs gap-1.5">
+            <Icon name="ShareIcon" size={14} />
+            Share
+          </Link>
+          <button onClick={() => exportSession(session)} className="btn-secondary text-xs gap-1.5">
             <Icon name="ArrowDownTrayIcon" size={14} />
-            Export
+            Quick Export
+          </button>
+          <button onClick={() => setExportModalOpen(true)} className="btn-primary text-xs gap-1.5">
+            <Icon name="ArrowDownTrayIcon" size={14} />
+            Export Transcript
           </button>
         </div>
       </div>
@@ -207,6 +217,11 @@ export default function SessionResultsClient() {
       {activeTab === 'tab-transcript' && <ResultsTranscriptTab session={session} />}
       {activeTab === 'tab-artifacts' && <ResultsArtifactsTab session={session} />}
       {activeTab === 'tab-analytics' && <ResultsAnalyticsTab session={session} />}
+
+      {/* JSON / Markdown / PDF export of this session */}
+      {exportModalOpen && (
+        <ExportModal session={session} onClose={() => setExportModalOpen(false)} />
+      )}
     </div>
   );
 }

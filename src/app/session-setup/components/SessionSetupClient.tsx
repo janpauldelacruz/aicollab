@@ -19,6 +19,9 @@ export type SessionMode = 'brainstorm' | 'code' | 'build' | 'chat';
 export type AgentRole =
   'brainstormer' | 'coder' | 'pm' | 'designer' | 'critic' | 'researcher' | 'architect';
 /** Any Ollama model tag installed on the host, e.g. "qwen2.5:14b". */
+import { useAuth } from '@/contexts/AuthContext';
+import { createSession, trackEvent } from '@/lib/supabase/sessionService';
+
 export type AgentModel = string;
 
 export interface AgentConfig {
@@ -65,6 +68,7 @@ export default function SessionSetupClient() {
   const [isLaunching, setIsLaunching] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const router = useRouter();
+  const { user } = useAuth();
 
   // Restore whatever was configured last time, including per-agent AI settings.
   useEffect(() => {
@@ -137,8 +141,32 @@ export default function SessionSetupClient() {
       createdAt: new Date().toISOString(),
     });
 
+    // Also expose the roster the way the shared/Supabase screens expect it.
+    if (typeof window !== 'undefined' && config.agents.length > 0) {
+      window.sessionStorage.setItem('sessionAgents', JSON.stringify(config.agents));
+    }
+
+    // Optional cloud copy — only when Supabase auth is actually configured.
+    try {
+      if (user) {
+        const dbSession = await createSession(config, user.id);
+        if (dbSession && typeof window !== 'undefined') {
+          window.sessionStorage.setItem('currentSessionId', dbSession.id);
+          await trackEvent('session_start', user.id, dbSession.id, {
+            mode: config.mode,
+            agentCount: config.agents.length,
+            topic: config.topic,
+            models: config.agents.map((a) => a.model),
+          });
+        }
+      }
+    } catch (err) {
+      // The session runs locally regardless; never block a launch on the cloud copy.
+      console.warn('Supabase session copy skipped:', err);
+    }
+
     clearSetupDraft();
-    await new Promise((r) => setTimeout(r, 600));
+    setIsLaunching(false);
     toast.success(`Session "${config.name}" launched! Agents are initializing…`);
     router.push('/live-chatroom');
   };

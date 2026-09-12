@@ -3,7 +3,23 @@ import { coveredGround } from './collaboration';
 import { DELIVERABLE_FILE, renderWorkspaceForPrompt } from './workspace';
 import type { Workspace } from './workspace';
 
-export type AIProvider = 'OLLAMA' | 'ANTHROPIC' | 'GEMINI' | 'OPEN_AI';
+export type AIProvider = 'OLLAMA' | 'ANTHROPIC' | 'GEMINI' | 'OPEN_AI' | 'PERPLEXITY';
+
+/**
+ * Works out which provider a model tag belongs to. Ollama tags carry a colon
+ * ("qwen2.5:7b") and stay local; anything matching a hosted family is routed to
+ * that provider instead, which needs its API key set in .env.
+ */
+export function inferProvider(model: string): AIProvider {
+  const m = model.toLowerCase();
+  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('text-'))
+    return 'OPEN_AI';
+  if (m.startsWith('claude')) return 'ANTHROPIC';
+  if (m.includes('gemini')) return 'GEMINI';
+  if (m.includes('sonar') || m.includes('perplexity')) return 'PERPLEXITY';
+  // Everything else is a local Ollama tag.
+  return 'OLLAMA';
+}
 
 /** Per-agent dials configured in the session wizard. 0-100 each. */
 export interface AgentSettings {
@@ -251,7 +267,7 @@ export function buildAgentsFromConfig(
     return {
       id: `agent-${index}-${config.role}`,
       name: config.name,
-      provider: 'OLLAMA' as const,
+      provider: inferProvider(config.model),
       model: config.model,
       role: config.role,
       color: ROLE_COLORS[config.role] || '#60a5fa',

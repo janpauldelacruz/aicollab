@@ -62,6 +62,27 @@ const ROLE_OPTIONS: { value: AgentRole; label: string; description: string; colo
   },
 ];
 
+/**
+ * Hosted models from the upstream update, offered alongside whatever Ollama has
+ * installed locally. These only work when the matching API key is set in .env;
+ * local tags need no key.
+ */
+const CLOUD_MODELS: { value: string; label: string; badge: string }[] = [
+  { value: 'gpt-4o', label: 'GPT-4o', badge: 'OpenAI' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', badge: 'OpenAI' },
+  { value: 'o1-mini', label: 'o1 Mini', badge: 'OpenAI' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', badge: 'Anthropic' },
+  { value: 'claude-3.5-sonnet', label: 'Claude 3.5 Sonnet', badge: 'Anthropic' },
+  { value: 'claude-3.5-haiku', label: 'Claude 3.5 Haiku', badge: 'Anthropic' },
+  { value: 'gemini/gemini-2.5-flash', label: 'Gemini 2.5 Flash', badge: 'Google' },
+  { value: 'gemini/gemini-2.5-pro', label: 'Gemini 2.5 Pro', badge: 'Google' },
+  {
+    value: 'llama-3.1-sonar-large-128k-online',
+    label: 'Sonar Large (Online)',
+    badge: 'Perplexity',
+  },
+];
+
 const DEFAULT_MODEL: AgentModel = FALLBACK_MODELS[0].id;
 
 const SUGGESTED_TEAM_MEMBERS: { name: string; role: AgentRole; model: AgentModel }[] = [
@@ -424,11 +445,20 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Model</label>
               <select className="input-base" {...register('model')} disabled={modelsLoading}>
-                {availableModels.map((m) => (
-                  <option key={`model-${m.id}`} value={m.id}>
-                    {m.label} — {modelBadge(m)}
-                  </option>
-                ))}
+                <optgroup label="Local — Ollama (no API key)">
+                  {availableModels.map((m) => (
+                    <option key={`model-${m.id}`} value={m.id}>
+                      {m.label} — {modelBadge(m)}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Hosted — needs an API key in .env">
+                  {CLOUD_MODELS.map((m) => (
+                    <option key={`cloud-${m.value}`} value={m.value}>
+                      {m.label} — {m.badge}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
               {modelsError && (
                 <p className="text-xs text-warning mt-1">

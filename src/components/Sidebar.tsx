@@ -20,6 +20,14 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'New Session', href: '/session-setup', icon: 'PlusCircleIcon', group: 'main' },
   { label: 'Agent Templates', href: '/agent-templates', icon: 'CpuIcon', group: 'library' },
   { label: 'Session Results', href: '/session-results', icon: 'BarChart2Icon', group: 'library' },
+  {
+    label: 'Past Collaborations',
+    href: '/past-collaborations',
+    icon: 'ClockIcon',
+    group: 'library',
+  },
+  { label: 'Share Session', href: '/share-session', icon: 'ShareIcon', group: 'library' },
+  { label: 'Account Settings', href: '/account-settings', icon: 'SettingsIcon', group: 'account' },
 ];
 
 interface SidebarProps {
@@ -52,6 +60,7 @@ export default function Sidebar({
 
   const mainItems = withBadges.filter((i) => i.group === 'main');
   const libraryItems = withBadges.filter((i) => i.group === 'library');
+  const accountItems = withBadges.filter((i) => i.group === 'account');
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = activeRoute === item.href;
@@ -124,6 +133,12 @@ export default function Sidebar({
           {libraryItems.map((item) => (
             <NavLink key={`nav-${item.href}`} item={item} />
           ))}
+
+          <div className={`my-3 border-t border-border ${collapsed ? 'mx-1' : 'mx-0'}`} />
+
+          {accountItems.map((item) => (
+            <NavLink key={`nav-${item.href}`} item={item} />
+          ))}
         </nav>
 
         {/* Bottom user section */}
@@ -181,6 +196,12 @@ export default function Sidebar({
           </p>
           {libraryItems.map((item) => (
             <NavLink key={`mobile-nav-lib-${item.href}`} item={item} />
+          ))}
+
+          <div className={`my-3 border-t border-border ${collapsed ? 'mx-1' : 'mx-0'}`} />
+
+          {accountItems.map((item) => (
+            <NavLink key={`mobile-nav-acc-${item.href}`} item={item} />
           ))}
         </nav>
       </aside>
