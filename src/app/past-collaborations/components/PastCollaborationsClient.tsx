@@ -1,11 +1,14 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import Icon from '@/components/ui/AppIcon';
 import { ModeBadge, SessionStatusBadge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserSessions } from '@/lib/supabase/sessionService';
+import { formatDuration, listSessions } from '@/lib/session/sessionStore';
+import { useLiveData } from '@/lib/session/useLiveData';
+import type { StoredSession } from '@/lib/session/sessionStore';
 import type { DBSession } from '@/lib/supabase/sessionService';
 import type { Session } from '@/app/sessions-dashboard/components/SessionsDashboardClient';
 
@@ -80,6 +83,33 @@ function CompletionBar({ pct }: { pct: number }) {
       <span className="text-xs font-mono text-muted-foreground w-8 text-right">{pct}%</span>
     </div>
   );
+}
+
+/** Maps a locally stored session onto this screen's card shape. */
+function storedToSession(stored: StoredSession): Session {
+  const STALE_AFTER_MS = 5 * 60 * 1000;
+  const isStale = Date.now() - new Date(stored.updatedAt).getTime() > STALE_AFTER_MS;
+  const hasDeliverable = stored.artifacts.some((a) => a.name === 'DELIVERABLE.md');
+
+  return {
+    id: stored.id,
+    name: stored.topic.slice(0, 60) + (stored.topic.length > 60 ? '…' : ''),
+    mode: 'build',
+    status: isStale
+      ? 'completed'
+      : stored.status === 'running'
+        ? 'running'
+        : stored.status === 'paused'
+          ? 'paused'
+          : 'completed',
+    agentCount: stored.agents.length,
+    messageCount: stored.messages.length,
+    artifactCount: stored.artifacts.length,
+    duration: formatDuration(stored.elapsedSeconds),
+    startedAt: new Date(stored.startedAt).toLocaleString(),
+    topic: stored.topic,
+    completionPct: hasDeliverable ? 100 : Math.min(99, Math.round((stored.turnCount / 18) * 100)),
+  };
 }
 
 function SessionCard({ session, onShare }: { session: Session; onShare: (id: string) => void }) {
@@ -206,16 +236,26 @@ export default function PastCollaborationsClient() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
 
+  // Sessions run locally, so the local store is the source of truth here — the
+  // same data the dashboard shows. Supabase rows are merged in when signed in.
+  const readLocal = useCallback(() => listSessions().map(storedToSession), []);
+  const [localSessions] = useLiveData<Session[]>(readLocal, []);
+
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    getUserSessions(user.id).then((data) => {
-      setSessions(data.map(dbSessionToSession));
-      setLoading(false);
-    });
-  }, [user]);
+    setSessions(localSessions);
+    setLoading(false);
+
+    if (!user) return;
+    getUserSessions(user.id)
+      .then((data) => {
+        const remote = data.map(dbSessionToSession);
+        const seen = new Set(localSessions.map((s) => s.id));
+        setSessions([...localSessions, ...remote.filter((r) => !seen.has(r.id))]);
+      })
+      .catch(() => {
+        // Cloud copy is optional; the local list already rendered.
+      });
+  }, [user, localSessions]);
 
   const filtered = sessions.filter((s) => {
     const matchStatus = statusFilter === 'all' || s.status === statusFilter;

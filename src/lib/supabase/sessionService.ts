@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/client';
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import type { SessionConfig, AgentConfig } from '@/app/session-setup/components/SessionSetupClient';
 
 export type SessionStatus = 'draft' | 'running' | 'paused' | 'completed' | 'stopped';
@@ -71,6 +71,7 @@ export async function createSession(
   config: SessionConfig,
   userId: string
 ): Promise<DBSession | null> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const { data, error } = await supabase
     .from('collab_sessions')
@@ -130,6 +131,7 @@ export async function updateSessionStatus(
     >
   >
 ): Promise<void> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const updates: any = { session_status: status, ...extra };
   if (status === 'running' && !extra?.started_at) {
@@ -144,6 +146,7 @@ export async function updateSessionStatus(
 }
 
 export async function getUserSessions(userId: string): Promise<DBSession[]> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const { data, error } = await supabase
     .from('collab_sessions')
@@ -159,6 +162,7 @@ export async function getUserSessions(userId: string): Promise<DBSession[]> {
 }
 
 export async function getSessionById(sessionId: string): Promise<DBSession | null> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const { data, error } = await supabase
     .from('collab_sessions')
@@ -186,6 +190,7 @@ export async function insertMessage(
     elapsedSeconds: number;
   }
 ): Promise<void> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const { error } = await supabase.from('session_messages').insert({
     session_id: sessionId,
@@ -204,6 +209,7 @@ export async function insertMessage(
 }
 
 export async function getSessionMessages(sessionId: string): Promise<DBMessage[]> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const { data, error } = await supabase
     .from('session_messages')
@@ -227,6 +233,7 @@ export async function insertArtifact(
     language?: string;
   }
 ): Promise<void> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const { error } = await supabase.from('session_artifacts').insert({
     session_id: sessionId,
@@ -241,6 +248,7 @@ export async function insertArtifact(
 }
 
 export async function getSessionArtifacts(sessionId: string): Promise<DBArtifact[]> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const { data, error } = await supabase
     .from('session_artifacts')
@@ -267,6 +275,7 @@ export async function createShareLink(
   userId: string,
   options: { label?: string; allowRerun?: boolean; expiresInDays?: number } = {}
 ): Promise<DBShareLink | null> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const token = generateToken();
   const expiresAt = options.expiresInDays
@@ -294,6 +303,7 @@ export async function createShareLink(
 }
 
 export async function getShareLinksForSession(sessionId: string): Promise<DBShareLink[]> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const { data, error } = await supabase
     .from('session_share_links')
@@ -311,6 +321,7 @@ export async function getSessionByShareToken(token: string): Promise<{
   artifacts: DBArtifact[];
   shareLink: DBShareLink;
 } | null> {
+  if (!isSupabaseConfigured) return null;
   const supabase = createClient();
 
   // Get share link
@@ -359,6 +370,7 @@ export async function getSessionByShareToken(token: string): Promise<{
 }
 
 export async function deleteShareLink(linkId: string): Promise<void> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   await supabase.from('session_share_links').delete().eq('id', linkId);
 }
@@ -373,6 +385,7 @@ export async function trackEvent(
   agentModel?: string,
   agentName?: string
 ): Promise<void> {
+  if (!isSupabaseConfigured) return null as never;
   const supabase = createClient();
   const { error } = await supabase.from('analytics_events').insert({
     event_type: eventType,
@@ -392,6 +405,15 @@ export async function getAnalyticsSummary(userId: string): Promise<{
   modelUsage: Record<string, number>;
   exportCount: number;
 }> {
+  if (!isSupabaseConfigured) {
+    return {
+      totalSessions: 0,
+      completedSessions: 0,
+      totalMessages: 0,
+      modelUsage: {},
+      exportCount: 0,
+    };
+  }
   const supabase = createClient();
 
   const [sessionsRes, eventsRes] = await Promise.all([
