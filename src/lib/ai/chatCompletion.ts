@@ -1,4 +1,4 @@
-import { callAIEndpoint } from './aiClient';
+import { callAIEndpoint, describeFetchFailure } from './aiClient';
 
 const ENDPOINT = '/api/ai/chat-completion';
 
@@ -73,7 +73,8 @@ export async function getStreamingChatCompletion(
       }
     }
   } catch (error) {
-    console.error('Streaming error:', error);
-    onError(error instanceof Error ? error : new Error('Streaming error'));
+    const described = describeFetchFailure(error);
+    console.error('Streaming error:', described);
+    onError(new Error(described));
   }
 }

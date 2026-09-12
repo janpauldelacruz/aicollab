@@ -3,11 +3,13 @@ import React from 'react';
 import { toast } from 'sonner';
 import Icon from '@/components/ui/AppIcon';
 import type { AgentTemplate } from './AgentTemplatesClient';
+import { shortModelLabel } from '@/lib/ai/models';
 
 interface Props {
   template: AgentTemplate;
   onDuplicate: (t: AgentTemplate) => void;
   onDelete: (t: AgentTemplate) => void;
+  onUse: (t: AgentTemplate) => void;
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -40,15 +42,7 @@ const ROLE_AVATAR_COLORS: Record<string, string> = {
   architect: '#60a5fa',
 };
 
-const MODEL_SHORT: Record<string, string> = {
-  'gpt-4o': 'GPT-4o',
-  'claude-3.5-sonnet': 'Claude 3.5',
-  'gemini-1.5-pro': 'Gemini 1.5',
-  'llama-3.1-70b': 'Llama 3.1',
-  'mistral-large': 'Mistral',
-};
-
-export default function TemplateCard({ template, onDuplicate, onDelete }: Props) {
+export default function TemplateCard({ template, onDuplicate, onDelete, onUse }: Props) {
   const avatarColor = ROLE_AVATAR_COLORS[template.role];
 
   return (
@@ -58,7 +52,11 @@ export default function TemplateCard({ template, onDuplicate, onDelete }: Props)
         <div className="flex items-center gap-3">
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-            style={{ backgroundColor: `${avatarColor}22`, color: avatarColor, border: `1.5px solid ${avatarColor}44` }}
+            style={{
+              backgroundColor: `${avatarColor}22`,
+              color: avatarColor,
+              border: `1.5px solid ${avatarColor}44`,
+            }}
           >
             {template.name.charAt(0)}
           </div>
@@ -71,7 +69,9 @@ export default function TemplateCard({ template, onDuplicate, onDelete }: Props)
                 </span>
               )}
             </div>
-            <span className="text-xs font-mono text-muted-foreground">{MODEL_SHORT[template.model]}</span>
+            <span className="text-xs font-mono text-muted-foreground">
+              {shortModelLabel(template.model)}
+            </span>
           </div>
         </div>
 
@@ -97,17 +97,24 @@ export default function TemplateCard({ template, onDuplicate, onDelete }: Props)
       </div>
 
       {/* Role badge */}
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border w-fit mb-2 ${ROLE_COLORS[template.role]}`}>
+      <span
+        className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border w-fit mb-2 ${ROLE_COLORS[template.role]}`}
+      >
         {ROLE_LABELS[template.role]}
       </span>
 
       {/* Personality */}
-      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3 flex-1">{template.personality}</p>
+      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3 flex-1">
+        {template.personality}
+      </p>
 
       {/* Traits */}
       <div className="flex flex-wrap gap-1 mb-3">
         {template.traits.slice(0, 3).map((trait) => (
-          <span key={`trait-${template.id}-${trait}`} className="px-2 py-0.5 rounded-full bg-muted/60 text-xs text-muted-foreground border border-border/50">
+          <span
+            key={`trait-${template.id}-${trait}`}
+            className="px-2 py-0.5 rounded-full bg-muted/60 text-xs text-muted-foreground border border-border/50"
+          >
             {trait}
           </span>
         ))}
@@ -150,7 +157,8 @@ export default function TemplateCard({ template, onDuplicate, onDelete }: Props)
           </span>
         </div>
         <button
-          onClick={() => toast.success(`"${template.name}" added to clipboard — paste into session setup`)}
+          onClick={() => onUse(template)}
+          title="Add this agent to a new session"
           className="btn-ghost text-xs py-1 px-2 text-primary hover:bg-primary/10"
         >
           Use

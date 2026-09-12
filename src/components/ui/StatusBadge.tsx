@@ -2,7 +2,8 @@ import React from 'react';
 
 type StatusType = 'running' | 'completed' | 'paused' | 'draft' | 'archived';
 type ModeType = 'brainstorm' | 'code' | 'build' | 'chat';
-type RoleType = 'brainstormer' | 'coder' | 'pm' | 'designer' | 'critic' | 'researcher' | 'architect';
+type RoleType =
+  'brainstormer' | 'coder' | 'pm' | 'designer' | 'critic' | 'researcher' | 'architect';
 
 export function SessionStatusBadge({ status }: { status: StatusType }) {
   const map: Record<StatusType, { label: string; className: string; dot?: boolean }> = {
@@ -15,7 +16,9 @@ export function SessionStatusBadge({ status }: { status: StatusType }) {
   const cfg = map[status];
   return (
     <span className={cfg.className}>
-      {cfg.dot && <span className="w-1.5 h-1.5 rounded-full bg-positive live-indicator inline-block" />}
+      {cfg.dot && (
+        <span className="w-1.5 h-1.5 rounded-full bg-positive live-indicator inline-block" />
+      )}
       {cfg.label}
     </span>
   );

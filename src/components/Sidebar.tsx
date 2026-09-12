@@ -1,8 +1,10 @@
 'use client';
-import React from 'react';
+import React, { useCallback } from 'react';
 import Link from 'next/link';
 import AppLogo from '@/components/ui/AppLogo';
 import Icon from '@/components/ui/AppIcon';
+import { listSessions } from '@/lib/session/sessionStore';
+import { useLiveData } from '@/lib/session/useLiveData';
 
 interface NavItem {
   label: string;
@@ -14,7 +16,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Sessions', href: '/sessions-dashboard', icon: 'LayoutDashboardIcon', group: 'main' },
-  { label: 'Live Chatroom', href: '/live-chatroom', icon: 'MessageSquareIcon', badge: 1, group: 'main' },
+  { label: 'Live Chatroom', href: '/live-chatroom', icon: 'MessageSquareIcon', group: 'main' },
   { label: 'New Session', href: '/session-setup', icon: 'PlusCircleIcon', group: 'main' },
   { label: 'Agent Templates', href: '/agent-templates', icon: 'CpuIcon', group: 'library' },
   { label: 'Session Results', href: '/session-results', icon: 'BarChart2Icon', group: 'library' },
@@ -27,9 +29,29 @@ interface SidebarProps {
   activeRoute?: string;
 }
 
-export default function Sidebar({ collapsed, mobileOpen, onMobileClose, activeRoute }: SidebarProps) {
-  const mainItems = NAV_ITEMS.filter((i) => i.group === 'main');
-  const libraryItems = NAV_ITEMS.filter((i) => i.group === 'library');
+export default function Sidebar({
+  collapsed,
+  mobileOpen,
+  onMobileClose,
+  activeRoute,
+}: SidebarProps) {
+  // Badge the chatroom with sessions that are genuinely still live, not a constant.
+  const readLiveCount = useCallback(() => {
+    const FRESH_MS = 5 * 60 * 1000;
+    return listSessions().filter(
+      (s) =>
+        (s.status === 'running' || s.status === 'paused') &&
+        Date.now() - new Date(s.updatedAt).getTime() < FRESH_MS
+    ).length;
+  }, []);
+  const [liveCount] = useLiveData<number>(readLiveCount, 0);
+
+  const withBadges = NAV_ITEMS.map((item) =>
+    item.href === '/live-chatroom' && liveCount > 0 ? { ...item, badge: liveCount } : item
+  );
+
+  const mainItems = withBadges.filter((i) => i.group === 'main');
+  const libraryItems = withBadges.filter((i) => i.group === 'library');
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = activeRoute === item.href;
@@ -39,14 +61,13 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, activeRo
         onClick={onMobileClose}
         className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
           isActive
-            ? 'bg-primary/10 text-primary border border-primary/20' :'text-muted-foreground hover:bg-muted hover:text-foreground'
+            ? 'bg-primary/10 text-primary border border-primary/20'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
         }`}
         title={collapsed ? item.label : undefined}
       >
         <Icon name={item.icon as any} size={18} className="flex-shrink-0" />
-        {!collapsed && (
-          <span className="text-sm font-medium truncate">{item.label}</span>
-        )}
+        {!collapsed && <span className="text-sm font-medium truncate">{item.label}</span>}
         {!collapsed && item.badge && (
           <span className="ml-auto flex-shrink-0 w-5 h-5 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-medium">
             {item.badge}
@@ -73,7 +94,9 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, activeRo
         }`}
       >
         {/* Logo */}
-        <div className={`flex items-center h-14 border-b border-border px-3 flex-shrink-0 ${collapsed ? 'justify-center' : 'gap-2.5'}`}>
+        <div
+          className={`flex items-center h-14 border-b border-border px-3 flex-shrink-0 ${collapsed ? 'justify-center' : 'gap-2.5'}`}
+        >
           <AppLogo size={28} />
           {!collapsed && (
             <span className="font-semibold text-base text-foreground tracking-tight">AICollab</span>
@@ -104,7 +127,9 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, activeRo
         </nav>
 
         {/* Bottom user section */}
-        <div className={`border-t border-border p-2 flex-shrink-0 ${collapsed ? 'flex justify-center' : ''}`}>
+        <div
+          className={`border-t border-border p-2 flex-shrink-0 ${collapsed ? 'flex justify-center' : ''}`}
+        >
           {collapsed ? (
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
               <span className="text-xs font-semibold text-primary">JL</span>
@@ -118,7 +143,11 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, activeRo
                 <p className="text-xs font-medium text-foreground truncate">Jamie Lin</p>
                 <p className="text-xs text-muted-foreground truncate">Pro Plan</p>
               </div>
-              <Icon name="ChevronUpDownIcon" size={14} className="ml-auto text-muted-foreground flex-shrink-0" />
+              <Icon
+                name="ChevronUpDownIcon"
+                size={14}
+                className="ml-auto text-muted-foreground flex-shrink-0"
+              />
             </div>
           )}
         </div>
@@ -140,12 +169,16 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, activeRo
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          <p className="px-3 py-2 text-xs font-medium uppercase tracking-widest text-muted-foreground/60">Workspace</p>
+          <p className="px-3 py-2 text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
+            Workspace
+          </p>
           {mainItems.map((item) => (
             <NavLink key={`mobile-nav-${item.href}`} item={item} />
           ))}
           <div className="my-3 border-t border-border" />
-          <p className="px-3 py-2 text-xs font-medium uppercase tracking-widest text-muted-foreground/60">Library</p>
+          <p className="px-3 py-2 text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
+            Library
+          </p>
           {libraryItems.map((item) => (
             <NavLink key={`mobile-nav-lib-${item.href}`} item={item} />
           ))}

@@ -1,9 +1,11 @@
 'use client';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import Modal from '@/components/ui/Modal';
 import Icon from '@/components/ui/AppIcon';
 import type { AgentTemplate, AgentRole, AgentModel } from './AgentTemplatesClient';
+import { useAvailableModels, modelBadge, FALLBACK_MODELS } from '@/lib/ai/models';
+import { isRoleDefaultText, roleDefault } from '@/lib/ai/roleDefaults';
 
 interface Props {
   open: boolean;
@@ -21,13 +23,7 @@ const ROLE_OPTIONS: { value: AgentRole; label: string }[] = [
   { value: 'researcher', label: 'Researcher' },
 ];
 
-const MODEL_OPTIONS: { value: AgentModel; label: string }[] = [
-  { value: 'gpt-4o', label: 'GPT-4o — OpenAI' },
-  { value: 'claude-3.5-sonnet', label: 'Claude 3.5 Sonnet — Anthropic' },
-  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro — Google' },
-  { value: 'llama-3.1-70b', label: 'Llama 3.1 70B — Meta' },
-  { value: 'mistral-large', label: 'Mistral Large — Mistral' },
-];
+const DEFAULT_MODEL: AgentModel = FALLBACK_MODELS[0].id;
 
 interface FormData {
   name: string;
@@ -42,19 +38,50 @@ interface FormData {
 }
 
 export default function CreateTemplateModal({ open, onClose, onCreate }: Props) {
-  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<FormData>({
+  const {
+    models: availableModels,
+    loading: modelsLoading,
+    error: modelsError,
+  } = useAvailableModels();
+  const {
+    register,
+    handleSubmit,
+    watch,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<FormData>({
     defaultValues: {
       name: '',
       role: 'coder',
-      model: 'gpt-4o',
-      personality: '',
+      model: DEFAULT_MODEL,
+      personality: roleDefault('coder').personality,
       traitsRaw: '',
-      systemPrompt: '',
-      creativity: 70,
-      verbosity: 60,
-      assertiveness: 65,
+      systemPrompt: roleDefault('coder').systemPrompt,
+      creativity: roleDefault('coder').creativity,
+      verbosity: roleDefault('coder').verbosity,
+      assertiveness: roleDefault('coder').assertiveness,
     },
   });
+
+  // Picking a role fills in that role's personality, prompt, and dials — unless
+  // the user has already written their own.
+  const selectedRole = watch('role');
+  useEffect(() => {
+    if (!open || !selectedRole) return;
+    const preset = roleDefault(selectedRole);
+
+    if (isRoleDefaultText(watch('personality') || '', 'personality')) {
+      setValue('personality', preset.personality);
+    }
+    if (isRoleDefaultText(watch('systemPrompt') || '', 'systemPrompt')) {
+      setValue('systemPrompt', preset.systemPrompt);
+      setValue('creativity', preset.creativity);
+      setValue('verbosity', preset.verbosity);
+      setValue('assertiveness', preset.assertiveness);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRole, open, setValue]);
 
   const onSubmit = (data: FormData) => {
     const traits = data.traitsRaw
@@ -77,12 +104,24 @@ export default function CreateTemplateModal({ open, onClose, onCreate }: Props) 
     reset();
   };
 
-  const SliderRow = ({ name, label }: { name: 'creativity' | 'verbosity' | 'assertiveness'; label: string }) => {
+  const SliderRow = ({
+    name,
+    label,
+  }: {
+    name: 'creativity' | 'verbosity' | 'assertiveness';
+    label: string;
+  }) => {
     const val = watch(name);
     return (
       <div className="flex items-center gap-3">
         <span className="text-xs text-muted-foreground w-20 flex-shrink-0">{label}</span>
-        <input type="range" min={0} max={100} className="flex-1 accent-primary" {...register(name, { valueAsNumber: true })} />
+        <input
+          type="range"
+          min={0}
+          max={100}
+          className="flex-1 accent-primary"
+          {...register(name, { valueAsNumber: true })}
+        />
         <span className="text-xs font-mono text-foreground tabular-nums w-6 text-right">{val}</span>
       </div>
     );
@@ -94,16 +133,26 @@ export default function CreateTemplateModal({ open, onClose, onCreate }: Props) 
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Agent Name</label>
-            <input type="text" placeholder="e.g. Nova" className="input-base" {...register('name', { required: 'Name is required' })} />
+            <input
+              type="text"
+              placeholder="e.g. Nova"
+              className="input-base"
+              {...register('name', { required: 'Name is required' })}
+            />
             {errors.name && <p className="text-xs text-negative mt-1">{errors.name.message}</p>}
           </div>
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Model</label>
-            <select className="input-base" {...register('model')}>
-              {MODEL_OPTIONS.map((m) => (
-                <option key={`create-model-${m.value}`} value={m.value}>{m.label}</option>
+            <select className="input-base" {...register('model')} disabled={modelsLoading}>
+              {availableModels.map((m) => (
+                <option key={`create-model-${m.id}`} value={m.id}>
+                  {m.label} — {modelBadge(m)}
+                </option>
               ))}
             </select>
+            {modelsError && (
+              <p className="text-xs text-warning mt-1">Ollama unreachable — showing defaults.</p>
+            )}
           </div>
         </div>
 
@@ -111,39 +160,68 @@ export default function CreateTemplateModal({ open, onClose, onCreate }: Props) 
           <label className="block text-xs font-medium text-foreground mb-1.5">Role</label>
           <select className="input-base" {...register('role')}>
             {ROLE_OPTIONS.map((r) => (
-              <option key={`create-role-${r.value}`} value={r.value}>{r.label}</option>
+              <option key={`create-role-${r.value}`} value={r.value}>
+                {r.label}
+              </option>
             ))}
           </select>
         </div>
 
         <div>
           <label className="block text-xs font-medium text-foreground mb-1.5">Personality</label>
-          <p className="text-xs text-muted-foreground mb-1.5">One-line description of this agent's communication style</p>
-          <input type="text" placeholder="e.g. Methodical, evidence-based, cites best practices" className="input-base" {...register('personality', { required: 'Personality is required' })} />
-          {errors.personality && <p className="text-xs text-negative mt-1">{errors.personality.message}</p>}
+          <p className="text-xs text-muted-foreground mb-1.5">
+            One-line description of this agent's communication style
+          </p>
+          <input
+            type="text"
+            placeholder="e.g. Methodical, evidence-based, cites best practices"
+            className="input-base"
+            {...register('personality', { required: 'Personality is required' })}
+          />
+          {errors.personality && (
+            <p className="text-xs text-negative mt-1">{errors.personality.message}</p>
+          )}
         </div>
 
         <div>
           <label className="block text-xs font-medium text-foreground mb-1.5">Trait Tags</label>
-          <p className="text-xs text-muted-foreground mb-1.5">Comma-separated list of up to 6 traits (e.g. Creative, Lateral, Energetic)</p>
-          <input type="text" placeholder="Creative, Lateral, Bold, Fast" className="input-base" {...register('traitsRaw')} />
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Comma-separated list of up to 6 traits (e.g. Creative, Lateral, Energetic)
+          </p>
+          <input
+            type="text"
+            placeholder="Creative, Lateral, Bold, Fast"
+            className="input-base"
+            {...register('traitsRaw')}
+          />
         </div>
 
         <div>
           <label className="block text-xs font-medium text-foreground mb-1.5">System Prompt</label>
-          <p className="text-xs text-muted-foreground mb-1.5">Custom instructions prepended to this agent's context in every session</p>
-          <textarea rows={3} placeholder="You are a…" className="input-base resize-none" {...register('systemPrompt')} />
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Custom instructions prepended to this agent's context in every session
+          </p>
+          <textarea
+            rows={3}
+            placeholder="You are a…"
+            className="input-base resize-none"
+            {...register('systemPrompt')}
+          />
         </div>
 
         <div className="space-y-3">
-          <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Behavior Parameters</p>
+          <p className="text-xs font-semibold text-foreground uppercase tracking-wider">
+            Behavior Parameters
+          </p>
           <SliderRow name="creativity" label="Creativity" />
           <SliderRow name="verbosity" label="Verbosity" />
           <SliderRow name="assertiveness" label="Assertiveness" />
         </div>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-border">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+          <button type="button" onClick={onClose} className="btn-secondary">
+            Cancel
+          </button>
           <button type="submit" className="btn-primary">
             <Icon name="PlusIcon" size={15} />
             Create Template

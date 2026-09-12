@@ -5,7 +5,15 @@ const NODES = [
   { id: 'node-pm', x: 50, y: 30, label: 'PM', color: '#7c3aed', size: 44, delay: '0s' },
   { id: 'node-coder', x: 20, y: 65, label: 'Coder', color: '#06b6d4', size: 36, delay: '1s' },
   { id: 'node-designer', x: 80, y: 65, label: 'Designer', color: '#ec4899', size: 36, delay: '2s' },
-  { id: 'node-researcher', x: 35, y: 85, label: 'Research', color: '#22c55e', size: 28, delay: '0.5s' },
+  {
+    id: 'node-researcher',
+    x: 35,
+    y: 85,
+    label: 'Research',
+    color: '#22c55e',
+    size: 28,
+    delay: '0.5s',
+  },
   { id: 'node-critic', x: 65, y: 85, label: 'Critic', color: '#ef4444', size: 28, delay: '1.5s' },
 ];
 
@@ -53,21 +61,15 @@ export default function AgentNetworkViz() {
 
         {/* Nodes */}
         {NODES?.map((n) => (
-          <g key={n?.id} style={{ animation: `node-float ${n?.size > 40 ? '6s' : '8s'} ease-in-out infinite`, animationDelay: n?.delay }}>
-            <circle
-              cx={n?.x}
-              cy={n?.y}
-              r={n?.size / 10 + 2}
-              fill={n?.color}
-              fillOpacity="0.15"
-            />
-            <circle
-              cx={n?.x}
-              cy={n?.y}
-              r={n?.size / 10}
-              fill={n?.color}
-              fillOpacity="0.9"
-            />
+          <g
+            key={n?.id}
+            style={{
+              animation: `node-float ${n?.size > 40 ? '6s' : '8s'} ease-in-out infinite`,
+              animationDelay: n?.delay,
+            }}
+          >
+            <circle cx={n?.x} cy={n?.y} r={n?.size / 10 + 2} fill={n?.color} fillOpacity="0.15" />
+            <circle cx={n?.x} cy={n?.y} r={n?.size / 10} fill={n?.color} fillOpacity="0.9" />
             <text
               x={n?.x}
               y={n?.y + 0.5}

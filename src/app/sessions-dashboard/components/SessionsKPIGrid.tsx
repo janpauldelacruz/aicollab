@@ -14,8 +14,12 @@ export default function SessionsKPIGrid({ sessions }: KPIProps) {
   const running = sessions.filter((s) => s.status === 'running').length;
   const totalArtifacts = sessions.reduce((a, s) => a + s.artifactCount, 0);
   const completed = sessions.filter((s) => s.status === 'completed');
-  const completionRate = sessions.length > 0 ? Math.round((completed.length / sessions.filter(s => s.status !== 'draft').length) * 100) : 0;
+  const completionRate =
+    sessions.length > 0
+      ? Math.round((completed.length / sessions.filter((s) => s.status !== 'draft').length) * 100)
+      : 0;
   const totalMessages = sessions.reduce((a, s) => a + s.messageCount, 0);
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
   // 4 cards → 2×2 grid
   const cards = [
@@ -23,7 +27,7 @@ export default function SessionsKPIGrid({ sessions }: KPIProps) {
       id: 'kpi-active',
       label: 'Active Sessions',
       value: running.toString(),
-      change: '+2 from yesterday',
+      change: `${plural(sessions.length, 'session')} recorded`,
       changeType: 'positive' as const,
       icon: 'PlayCircleIcon',
       iconColor: 'text-positive',
@@ -35,7 +39,7 @@ export default function SessionsKPIGrid({ sessions }: KPIProps) {
       id: 'kpi-artifacts',
       label: 'Artifacts Generated',
       value: totalArtifacts.toString(),
-      change: '+14 this session',
+      change: `across ${plural(sessions.length, 'session')}`,
       changeType: 'positive' as const,
       icon: 'DocumentTextIcon',
       iconColor: 'text-accent',
@@ -47,7 +51,7 @@ export default function SessionsKPIGrid({ sessions }: KPIProps) {
       id: 'kpi-completion',
       label: 'Completion Rate',
       value: `${completionRate}%`,
-      change: '-3% vs last week',
+      change: `${completed.length} finished`,
       changeType: 'negative' as const,
       icon: 'CheckCircleIcon',
       iconColor: 'text-warning',
@@ -59,7 +63,7 @@ export default function SessionsKPIGrid({ sessions }: KPIProps) {
       id: 'kpi-messages',
       label: 'Messages Exchanged',
       value: totalMessages.toLocaleString(),
-      change: '+312 today',
+      change: `${plural(sessions.length, 'session')} total`,
       changeType: 'positive' as const,
       icon: 'ChatBubbleLeftRightIcon',
       iconColor: 'text-primary',
@@ -75,16 +79,27 @@ export default function SessionsKPIGrid({ sessions }: KPIProps) {
         <div key={card.id} className={`card-base border ${card.bgColor} relative overflow-hidden`}>
           <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{card.label}</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                {card.label}
+              </p>
               <p className="text-3xl font-bold text-foreground tabular-nums mt-1">{card.value}</p>
             </div>
-            <div className={`w-9 h-9 rounded-lg bg-card flex items-center justify-center flex-shrink-0`}>
+            <div
+              className={`w-9 h-9 rounded-lg bg-card flex items-center justify-center flex-shrink-0`}
+            >
               <Icon name={card.icon as any} size={18} className={card.iconColor} />
             </div>
           </div>
           <div className="flex items-center justify-between">
-            <p className={`text-xs flex items-center gap-1 ${card.changeType === 'positive' ? 'text-positive' : 'text-negative'}`}>
-              <Icon name={card.changeType === 'positive' ? 'ArrowTrendingUpIcon' : 'ArrowTrendingDownIcon'} size={12} />
+            <p
+              className={`text-xs flex items-center gap-1 ${card.changeType === 'positive' ? 'text-positive' : 'text-negative'}`}
+            >
+              <Icon
+                name={
+                  card.changeType === 'positive' ? 'ArrowTrendingUpIcon' : 'ArrowTrendingDownIcon'
+                }
+                size={12}
+              />
               {card.change}
             </p>
           </div>

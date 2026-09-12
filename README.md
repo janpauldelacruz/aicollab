@@ -25,6 +25,59 @@ A modern Next.js 15 application built with TypeScript and Tailwind CSS.
   ```
 3. Open [http://localhost:4028](http://localhost:4028) with your browser to see the result.
 
+## 🧠 Local AI models (Ollama)
+
+Every agent in AICollab runs on your **local Ollama daemon** — no API keys, no
+credits, no data leaving the machine.
+
+### Setup
+
+1. Install [Ollama](https://ollama.com/download) and make sure it is running:
+   ```bash
+   ollama serve
+   ```
+2. Pull at least one chat model:
+   ```bash
+   ollama pull qwen2.5:7b
+   ```
+3. Start the app (`npm run dev`) and open the Live Chatroom — the landing screen
+   shows `Ollama connected · N models installed` when the daemon is reachable.
+
+### Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Where the Ollama daemon lives. Point this at a remote host to use another machine's GPU. |
+
+### How it is wired
+
+- `src/lib/ai/ollama.ts` — server-side client for Ollama's OpenAI-compatible
+  `/v1/chat/completions` endpoint, plus model discovery via `/api/tags`.
+- `GET /api/ai/models` — lists the models actually installed on the host. Every
+  model picker in the UI is populated from this, so pulling a new model makes it
+  selectable after a refresh.
+- `POST /api/ai/chat-completion` — send `provider: "OLLAMA"` with any installed
+  model tag. Both streaming and non-streaming are supported; hosted providers
+  (`OPEN_AI`, `ANTHROPIC`, `GEMINI`, `PERPLEXITY`) still work when their API keys
+  are set.
+- `src/lib/ai/multiAgentChat.ts` — the three chatroom agents (Orion the
+  architect, Atlas the researcher, Zara the coder). Each has a preferred model
+  list and falls back to whatever is installed.
+
+Example request:
+
+```bash
+curl -X POST http://localhost:4028/api/ai/chat-completion -H "Content-Type: application/json" -d '{"provider":"OLLAMA","model":"qwen2.5:7b","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+### Troubleshooting
+
+- **"Ollama unreachable"** — the daemon is not running. Start it with `ollama serve`.
+- **"model ... is not installed"** — run `ollama pull <tag>` for the model the
+  agent is assigned.
+- Large models load into memory on first use, so the first turn of a session can
+  take 30-60s before tokens start flowing.
+
 ## 📁 Project Structure
 
 ```

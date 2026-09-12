@@ -35,8 +35,12 @@ export default function AuthPageClient() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const loginForm = useForm<LoginForm>({ defaultValues: { email: '', password: '', remember: false } });
-  const signupForm = useForm<SignupForm>({ defaultValues: { name: '', email: '', password: '', confirmPassword: '', terms: false } });
+  const loginForm = useForm<LoginForm>({
+    defaultValues: { email: '', password: '', remember: false },
+  });
+  const signupForm = useForm<SignupForm>({
+    defaultValues: { name: '', email: '', password: '', confirmPassword: '', terms: false },
+  });
 
   const handleLogin = async (data: LoginForm) => {
     setIsLoading(true);
@@ -44,7 +48,9 @@ export default function AuthPageClient() {
     await new Promise((r) => setTimeout(r, 1200));
     const valid = DEMO_ACCOUNTS.some((a) => a.email === data.email && a.password === data.password);
     if (!valid) {
-      loginForm.setError('email', { message: 'Invalid credentials — use the demo accounts below to sign in' });
+      loginForm.setError('email', {
+        message: 'Invalid credentials — use the demo accounts below to sign in',
+      });
       setIsLoading(false);
       return;
     }
@@ -79,8 +85,13 @@ export default function AuthPageClient() {
       {/* Left panel */}
       <div className="hidden lg:flex flex-col flex-1 gradient-auth-left relative overflow-hidden p-12">
         {/* Background grid */}
-        <div className="absolute inset-0 opacity-5"
-          style={{ backgroundImage: 'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+        <div
+          className="absolute inset-0 opacity-5"
+          style={{
+            backgroundImage:
+              'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+          }}
         />
 
         {/* Logo */}
@@ -95,22 +106,27 @@ export default function AuthPageClient() {
 
           <div className="mt-10 text-center max-w-sm">
             <h1 className="text-3xl font-bold text-foreground leading-tight">
-              AI agents that{' '}
-              <span className="text-gradient-primary">think, debate,</span>
-              {' '}and build together
+              AI agents that <span className="text-gradient-primary">think, debate,</span> and build
+              together
             </h1>
             <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-              Configure multi-agent teams, assign roles, and watch them collaborate on real problems — all in one session.
+              Configure multi-agent teams, assign roles, and watch them collaborate on real problems
+              — all in one session.
             </p>
           </div>
 
           {/* Feature pills */}
           <div className="mt-8 flex flex-wrap gap-2 justify-center">
-            {['Brainstorm Mode', 'Code Collaboration', 'End-to-End Build', 'Open Debate'].map((f) => (
-              <span key={`feature-${f}`} className="px-3 py-1.5 rounded-full border border-border bg-card/40 text-xs text-muted-foreground backdrop-blur-sm">
-                {f}
-              </span>
-            ))}
+            {['Brainstorm Mode', 'Code Collaboration', 'End-to-End Build', 'Open Debate'].map(
+              (f) => (
+                <span
+                  key={`feature-${f}`}
+                  className="px-3 py-1.5 rounded-full border border-border bg-card/40 text-xs text-muted-foreground backdrop-blur-sm"
+                >
+                  {f}
+                </span>
+              )
+            )}
           </div>
         </div>
 
@@ -145,7 +161,9 @@ export default function AuthPageClient() {
                 key={`tab-${t}`}
                 onClick={() => setTab(t)}
                 className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  tab === t ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  tab === t
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {t === 'login' ? 'Sign In' : 'Create Account'}
@@ -157,7 +175,9 @@ export default function AuthPageClient() {
             <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
               <div>
                 <h2 className="text-xl font-semibold text-foreground">Welcome back</h2>
-                <p className="text-sm text-muted-foreground mt-1">Sign in to your AICollab workspace</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Sign in to your AICollab workspace
+                </p>
               </div>
 
               {/* OAuth */}
@@ -180,7 +200,9 @@ export default function AuthPageClient() {
 
               {/* Email */}
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5">Email address</label>
+                <label className="block text-xs font-medium text-foreground mb-1.5">
+                  Email address
+                </label>
                 <input
                   type="email"
                   placeholder="jamie@aicollab.dev"
@@ -188,7 +210,9 @@ export default function AuthPageClient() {
                   {...loginForm.register('email', { required: 'Email is required' })}
                 />
                 {loginForm.formState.errors.email && (
-                  <p className="text-xs text-negative mt-1">{loginForm.formState.errors.email.message}</p>
+                  <p className="text-xs text-negative mt-1">
+                    {loginForm.formState.errors.email.message}
+                  </p>
                 )}
               </div>
 
@@ -196,7 +220,9 @@ export default function AuthPageClient() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-foreground">Password</label>
-                  <span className="text-xs text-primary cursor-pointer hover:underline">Forgot password?</span>
+                  <span className="text-xs text-primary cursor-pointer hover:underline">
+                    Forgot password?
+                  </span>
                 </div>
                 <div className="relative">
                   <input
@@ -214,7 +240,9 @@ export default function AuthPageClient() {
                   </button>
                 </div>
                 {loginForm.formState.errors.password && (
-                  <p className="text-xs text-negative mt-1">{loginForm.formState.errors.password.message}</p>
+                  <p className="text-xs text-negative mt-1">
+                    {loginForm.formState.errors.password.message}
+                  </p>
                 )}
               </div>
 
@@ -231,11 +259,7 @@ export default function AuthPageClient() {
                 </label>
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="btn-primary w-full py-2.5 mt-2"
-              >
+              <button type="submit" disabled={isLoading} className="btn-primary w-full py-2.5 mt-2">
                 {isLoading ? (
                   <>
                     <Icon name="ArrowPathIcon" size={16} className="animate-spin" />
@@ -250,7 +274,9 @@ export default function AuthPageClient() {
             <form onSubmit={signupForm.handleSubmit(handleSignup)} className="space-y-4">
               <div>
                 <h2 className="text-xl font-semibold text-foreground">Create your account</h2>
-                <p className="text-sm text-muted-foreground mt-1">Start collaborating with AI agents today</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Start collaborating with AI agents today
+                </p>
               </div>
 
               {/* OAuth */}
@@ -272,7 +298,9 @@ export default function AuthPageClient() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5">Full name</label>
+                <label className="block text-xs font-medium text-foreground mb-1.5">
+                  Full name
+                </label>
                 <input
                   type="text"
                   placeholder="Jamie Lin"
@@ -280,12 +308,16 @@ export default function AuthPageClient() {
                   {...signupForm.register('name', { required: 'Name is required' })}
                 />
                 {signupForm.formState.errors.name && (
-                  <p className="text-xs text-negative mt-1">{signupForm.formState.errors.name.message}</p>
+                  <p className="text-xs text-negative mt-1">
+                    {signupForm.formState.errors.name.message}
+                  </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5">Email address</label>
+                <label className="block text-xs font-medium text-foreground mb-1.5">
+                  Email address
+                </label>
                 <input
                   type="email"
                   placeholder="you@company.com"
@@ -293,7 +325,9 @@ export default function AuthPageClient() {
                   {...signupForm.register('email', { required: 'Email is required' })}
                 />
                 {signupForm.formState.errors.email && (
-                  <p className="text-xs text-negative mt-1">{signupForm.formState.errors.email.message}</p>
+                  <p className="text-xs text-negative mt-1">
+                    {signupForm.formState.errors.email.message}
+                  </p>
                 )}
               </div>
 
@@ -304,32 +338,51 @@ export default function AuthPageClient() {
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Min. 8 characters"
                     className="input-base pr-10"
-                    {...signupForm.register('password', { required: 'Password is required', minLength: { value: 8, message: 'Minimum 8 characters' } })}
+                    {...signupForm.register('password', {
+                      required: 'Password is required',
+                      minLength: { value: 8, message: 'Minimum 8 characters' },
+                    })}
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
                     <Icon name={showPassword ? 'EyeSlashIcon' : 'EyeIcon'} size={16} />
                   </button>
                 </div>
                 {signupForm.formState.errors.password && (
-                  <p className="text-xs text-negative mt-1">{signupForm.formState.errors.password.message}</p>
+                  <p className="text-xs text-negative mt-1">
+                    {signupForm.formState.errors.password.message}
+                  </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5">Confirm password</label>
+                <label className="block text-xs font-medium text-foreground mb-1.5">
+                  Confirm password
+                </label>
                 <div className="relative">
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     placeholder="••••••••"
                     className="input-base pr-10"
-                    {...signupForm.register('confirmPassword', { required: 'Please confirm your password' })}
+                    {...signupForm.register('confirmPassword', {
+                      required: 'Please confirm your password',
+                    })}
                   />
-                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
                     <Icon name={showConfirmPassword ? 'EyeSlashIcon' : 'EyeIcon'} size={16} />
                   </button>
                 </div>
                 {signupForm.formState.errors.confirmPassword && (
-                  <p className="text-xs text-negative mt-1">{signupForm.formState.errors.confirmPassword.message}</p>
+                  <p className="text-xs text-negative mt-1">
+                    {signupForm.formState.errors.confirmPassword.message}
+                  </p>
                 )}
               </div>
 
@@ -340,11 +393,18 @@ export default function AuthPageClient() {
                   className="w-3.5 h-3.5 rounded border-border bg-input accent-primary mt-0.5"
                   {...signupForm.register('terms', { required: 'You must accept the terms' })}
                 />
-                <label htmlFor="terms" className="text-xs text-muted-foreground cursor-pointer leading-relaxed">
+                <label
+                  htmlFor="terms"
+                  className="text-xs text-muted-foreground cursor-pointer leading-relaxed"
+                >
                   I agree to the{' '}
-                  <span className="text-primary hover:underline cursor-pointer">Terms of Service</span>
-                  {' '}and{' '}
-                  <span className="text-primary hover:underline cursor-pointer">Privacy Policy</span>
+                  <span className="text-primary hover:underline cursor-pointer">
+                    Terms of Service
+                  </span>{' '}
+                  and{' '}
+                  <span className="text-primary hover:underline cursor-pointer">
+                    Privacy Policy
+                  </span>
                 </label>
               </div>
               {signupForm.formState.errors.terms && (
@@ -353,7 +413,10 @@ export default function AuthPageClient() {
 
               <button type="submit" disabled={isLoading} className="btn-primary w-full py-2.5">
                 {isLoading ? (
-                  <><Icon name="ArrowPathIcon" size={16} className="animate-spin" /> Creating account…</>
+                  <>
+                    <Icon name="ArrowPathIcon" size={16} className="animate-spin" /> Creating
+                    account…
+                  </>
                 ) : (
                   'Create Account'
                 )}
@@ -371,7 +434,9 @@ export default function AuthPageClient() {
               {DEMO_ACCOUNTS.map((acc) => (
                 <div key={`demo-${acc.role}`} className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground w-14">{acc.role}</span>
-                  <span className="text-xs font-mono text-foreground flex-1 truncate">{acc.email}</span>
+                  <span className="text-xs font-mono text-foreground flex-1 truncate">
+                    {acc.email}
+                  </span>
                   <button
                     type="button"
                     onClick={() => autofillCredentials(acc.email, acc.password)}

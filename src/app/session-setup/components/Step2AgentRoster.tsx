@@ -1,10 +1,13 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import Icon from '@/components/ui/AppIcon';
 import Modal from '@/components/ui/Modal';
 import type { AgentConfig, AgentRole, AgentModel, SessionMode } from './SessionSetupClient';
+import { useAvailableModels, modelBadge, FALLBACK_MODELS } from '@/lib/ai/models';
+import { isRoleDefaultText, roleDefault } from '@/lib/ai/roleDefaults';
+import { distinctModels } from '@/lib/ai/multiAgentChat';
 
 interface Props {
   agents: AgentConfig[];
@@ -15,33 +18,75 @@ interface Props {
 }
 
 const ROLE_OPTIONS: { value: AgentRole; label: string; description: string; color: string }[] = [
-  { value: 'pm', label: 'Project Manager', description: 'Coordinates agents, tracks progress, keeps focus', color: 'text-violet-400' },
-  { value: 'brainstormer', label: 'Brainstormer', description: 'Generates creative ideas and lateral thinking', color: 'text-amber-400' },
-  { value: 'coder', label: 'Coder', description: 'Writes, reviews, and refactors code', color: 'text-cyan-400' },
-  { value: 'designer', label: 'Designer', description: 'Handles UX, visual design, and system design', color: 'text-pink-400' },
-  { value: 'critic', label: 'Critic', description: 'Challenges assumptions, identifies flaws', color: 'text-red-400' },
-  { value: 'researcher', label: 'Researcher', description: 'Gathers context, cites best practices', color: 'text-green-400' },
-  { value: 'architect', label: 'Architect', description: 'Designs technical systems and structures', color: 'text-blue-400' },
+  {
+    value: 'pm',
+    label: 'Project Manager',
+    description: roleDefault('pm').description,
+    color: 'text-violet-400',
+  },
+  {
+    value: 'brainstormer',
+    label: 'Brainstormer',
+    description: roleDefault('brainstormer').description,
+    color: 'text-amber-400',
+  },
+  {
+    value: 'coder',
+    label: 'Coder',
+    description: roleDefault('coder').description,
+    color: 'text-cyan-400',
+  },
+  {
+    value: 'designer',
+    label: 'Designer',
+    description: roleDefault('designer').description,
+    color: 'text-pink-400',
+  },
+  {
+    value: 'critic',
+    label: 'Critic',
+    description: roleDefault('critic').description,
+    color: 'text-red-400',
+  },
+  {
+    value: 'researcher',
+    label: 'Researcher',
+    description: roleDefault('researcher').description,
+    color: 'text-green-400',
+  },
+  {
+    value: 'architect',
+    label: 'Architect',
+    description: roleDefault('architect').description,
+    color: 'text-blue-400',
+  },
 ];
 
-const MODEL_OPTIONS: { value: AgentModel; label: string; badge: string }[] = [
-  { value: 'gpt-4o', label: 'GPT-4o', badge: 'OpenAI' },
-  { value: 'claude-3.5-sonnet', label: 'Claude 3.5 Sonnet', badge: 'Anthropic' },
-  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', badge: 'Google' },
-  { value: 'llama-3.1-70b', label: 'Llama 3.1 70B', badge: 'Meta' },
-  { value: 'mistral-large', label: 'Mistral Large', badge: 'Mistral' },
+const DEFAULT_MODEL: AgentModel = FALLBACK_MODELS[0].id;
+
+const SUGGESTED_TEAM_MEMBERS: { name: string; role: AgentRole; model: AgentModel }[] = [
+  { name: 'Mira', role: 'pm', model: 'qwen2.5:14b' },
+  { name: 'Orion', role: 'architect', model: 'qwen2.5:14b' },
+  { name: 'Zara', role: 'coder', model: 'qwen2.5:7b' },
+  { name: 'Rex', role: 'critic', model: 'hermes3:latest' },
+  { name: 'Atlas', role: 'researcher', model: 'hermes3:latest' },
 ];
 
+/** The suggested team uses each role's defaults, so it behaves like a configured one. */
 const SUGGESTED_TEAMS: { mode: SessionMode; agents: Omit<AgentConfig, 'id'>[] }[] = [
   {
     mode: 'build',
-    agents: [
-      { name: 'Mira', role: 'pm', model: 'claude-3.5-sonnet', personality: 'Organized, decisive, keeps the team on track', creativity: 60, verbosity: 50, assertiveness: 75, systemPrompt: 'You are a senior product manager who keeps the team focused and on schedule.' },
-      { name: 'Orion', role: 'architect', model: 'gpt-4o', personality: 'Systematic, thorough, loves clean abstractions', creativity: 65, verbosity: 70, assertiveness: 65, systemPrompt: 'You are a solutions architect who designs robust, scalable systems.' },
-      { name: 'Zara', role: 'coder', model: 'gpt-4o', personality: 'Detail-oriented, pragmatic, writes clean code', creativity: 55, verbosity: 60, assertiveness: 55, systemPrompt: 'You are a senior full-stack engineer who writes production-quality code.' },
-      { name: 'Lena', role: 'designer', model: 'claude-3.5-sonnet', personality: 'Empathetic, visual, user-obsessed', creativity: 85, verbosity: 65, assertiveness: 60, systemPrompt: 'You are a UX/UI designer focused on user experience and visual clarity.' },
-      { name: 'Rex', role: 'critic', model: 'gemini-1.5-pro', personality: 'Skeptical, rigorous, finds edge cases', creativity: 50, verbosity: 55, assertiveness: 85, systemPrompt: 'You are a critical reviewer who challenges every assumption and finds potential issues.' },
-    ],
+    agents: SUGGESTED_TEAM_MEMBERS.map((member) => {
+      const preset = roleDefault(member.role);
+      return {
+        ...member,
+        personality: preset.personality,
+        systemPrompt: preset.systemPrompt,
+        creativity: preset.creativity,
+        verbosity: preset.verbosity,
+        assertiveness: preset.assertiveness,
+      };
+    }),
   },
 ];
 
@@ -69,26 +114,87 @@ const ROLE_COLORS: Record<AgentRole, string> = {
 export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNext }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentConfig | null>(null);
+  const {
+    models: availableModels,
+    loading: modelsLoading,
+    error: modelsError,
+  } = useAvailableModels();
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AgentFormData>({
-    defaultValues: { name: '', role: 'coder', model: 'gpt-4o', personality: '', systemPrompt: '', creativity: 70, verbosity: 60, assertiveness: 65 },
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<AgentFormData>({
+    defaultValues: {
+      name: '',
+      role: 'coder',
+      model: DEFAULT_MODEL,
+      personality: roleDefault('coder').personality,
+      systemPrompt: roleDefault('coder').systemPrompt,
+      creativity: roleDefault('coder').creativity,
+      verbosity: roleDefault('coder').verbosity,
+      assertiveness: roleDefault('coder').assertiveness,
+    },
   });
 
   const openAddModal = () => {
-    reset({ name: '', role: 'coder', model: 'gpt-4o', personality: '', systemPrompt: '', creativity: 70, verbosity: 60, assertiveness: 65 });
+    const preset = roleDefault('coder');
+    reset({
+      name: '',
+      role: 'coder',
+      model: DEFAULT_MODEL,
+      personality: preset.personality,
+      systemPrompt: preset.systemPrompt,
+      creativity: preset.creativity,
+      verbosity: preset.verbosity,
+      assertiveness: preset.assertiveness,
+    });
     setEditingAgent(null);
     setModalOpen(true);
   };
 
   const openEditModal = (agent: AgentConfig) => {
-    reset({ name: agent.name, role: agent.role, model: agent.model, personality: agent.personality, systemPrompt: agent.systemPrompt, creativity: agent.creativity, verbosity: agent.verbosity, assertiveness: agent.assertiveness });
+    reset({
+      name: agent.name,
+      role: agent.role,
+      model: agent.model,
+      personality: agent.personality,
+      systemPrompt: agent.systemPrompt,
+      creativity: agent.creativity,
+      verbosity: agent.verbosity,
+      assertiveness: agent.assertiveness,
+    });
     setEditingAgent(agent);
     setModalOpen(true);
   };
 
+  // Changing the role swaps in that role's defaults, but never overwrites text
+  // the user actually wrote.
+  const selectedRole = watch('role');
+  useEffect(() => {
+    if (!modalOpen || !selectedRole) return;
+    const preset = roleDefault(selectedRole);
+
+    if (isRoleDefaultText(watch('personality') || '', 'personality')) {
+      setValue('personality', preset.personality);
+    }
+    if (isRoleDefaultText(watch('systemPrompt') || '', 'systemPrompt')) {
+      setValue('systemPrompt', preset.systemPrompt);
+      setValue('creativity', preset.creativity);
+      setValue('verbosity', preset.verbosity);
+      setValue('assertiveness', preset.assertiveness);
+    }
+    // watch() is read imperatively on purpose — adding it to the deps would
+    // re-run this on every keystroke and fight the user's edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRole, modalOpen, setValue]);
+
   const onSubmitAgent = (data: AgentFormData) => {
     if (editingAgent) {
-      onChange(agents.map((a) => a.id === editingAgent.id ? { ...editingAgent, ...data } : a));
+      onChange(agents.map((a) => (a.id === editingAgent.id ? { ...editingAgent, ...data } : a)));
       toast.success(`Agent "${data.name}" updated`);
     } else {
       const newAgent: AgentConfig = { id: `agent-${Date.now()}`, ...data };
@@ -110,7 +216,15 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
     toast.success(`Loaded suggested ${mode} team — ${withIds.length} agents`);
   };
 
-  const SliderField = ({ name, label, description }: { name: 'creativity' | 'verbosity' | 'assertiveness'; label: string; description: string }) => {
+  const SliderField = ({
+    name,
+    label,
+    description,
+  }: {
+    name: 'creativity' | 'verbosity' | 'assertiveness';
+    label: string;
+    description: string;
+  }) => {
     const val = watch(name);
     return (
       <div>
@@ -119,7 +233,13 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
           <span className="text-xs font-mono text-muted-foreground tabular-nums">{val}</span>
         </div>
         <p className="text-xs text-muted-foreground mb-2">{description}</p>
-        <input type="range" min={0} max={100} className="w-full accent-primary" {...register(name, { valueAsNumber: true })} />
+        <input
+          type="range"
+          min={0}
+          max={100}
+          className="w-full accent-primary"
+          {...register(name, { valueAsNumber: true })}
+        />
       </div>
     );
   };
@@ -129,7 +249,9 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Agent Roster</h2>
-          <p className="text-sm text-muted-foreground mt-1">Add agents and assign their roles, models, and personalities</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Add agents and assign their roles, models, and personalities
+          </p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
           <button type="button" onClick={loadSuggested} className="btn-secondary text-xs gap-1.5">
@@ -143,11 +265,33 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
         </div>
       </div>
 
+      {distinctModels(agents).length > 1 && (
+        <div className="card-base border-warning/30 bg-warning/5 flex items-start gap-3">
+          <Icon
+            name="ExclamationTriangleIcon"
+            size={16}
+            className="text-warning flex-shrink-0 mt-0.5"
+          />
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              This roster uses {distinctModels(agents).length} different models
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Ollama keeps one model in VRAM at a time on most GPUs, so it must unload and reload a
+              multi-gigabyte model on every turn — often slower than the generation itself. Put
+              every agent on the same model unless you specifically need the differences.
+            </p>
+          </div>
+        </div>
+      )}
+
       {agents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-border rounded-xl">
           <Icon name="UsersIcon" size={40} className="text-muted-foreground/30 mb-4" />
           <p className="text-sm font-medium text-muted-foreground">No agents yet</p>
-          <p className="text-xs text-muted-foreground/60 mt-1 mb-4">Add agents manually or load a suggested team for this mode</p>
+          <p className="text-xs text-muted-foreground/60 mt-1 mb-4">
+            Add agents manually or load a suggested team for this mode
+          </p>
           <div className="flex gap-3">
             <button type="button" onClick={loadSuggested} className="btn-secondary text-xs">
               <Icon name="SparklesIcon" size={14} />
@@ -162,10 +306,15 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {agents.map((agent) => (
-            <div key={agent.id} className="card-base group relative hover:border-primary/30 transition-colors">
+            <div
+              key={agent.id}
+              className="card-base group relative hover:border-primary/30 transition-colors"
+            >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className={`w-9 h-9 rounded-full border flex items-center justify-center text-sm font-semibold ${ROLE_COLORS[agent.role]}`}>
+                  <div
+                    className={`w-9 h-9 rounded-full border flex items-center justify-center text-sm font-semibold ${ROLE_COLORS[agent.role]}`}
+                  >
                     {agent.name.charAt(0)}
                   </div>
                   <div>
@@ -174,16 +323,26 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
                   </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => openEditModal(agent)} className="btn-ghost p-1" title="Edit agent">
+                  <button
+                    onClick={() => openEditModal(agent)}
+                    className="btn-ghost p-1"
+                    title="Edit agent"
+                  >
                     <Icon name="PencilIcon" size={13} />
                   </button>
-                  <button onClick={() => removeAgent(agent.id)} className="btn-ghost p-1 text-negative hover:bg-negative/10" title="Remove agent">
+                  <button
+                    onClick={() => removeAgent(agent.id)}
+                    className="btn-ghost p-1 text-negative hover:bg-negative/10"
+                    title="Remove agent"
+                  >
                     <Icon name="TrashIcon" size={13} />
                   </button>
                 </div>
               </div>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_COLORS[agent.role]}`}>
-                {ROLE_OPTIONS.find(r => r.value === agent.role)?.label}
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_COLORS[agent.role]}`}
+              >
+                {ROLE_OPTIONS.find((r) => r.value === agent.role)?.label}
               </span>
               <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{agent.personality}</p>
               <div className="mt-3 grid grid-cols-3 gap-1">
@@ -194,7 +353,10 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
                 ].map((stat) => (
                   <div key={`stat-${agent.id}-${stat.label}`} className="text-center">
                     <div className="h-1 rounded-full bg-muted overflow-hidden mb-1">
-                      <div className="h-full bg-primary/60 rounded-full" style={{ width: `${stat.val}%` }} />
+                      <div
+                        className="h-full bg-primary/60 rounded-full"
+                        style={{ width: `${stat.val}%` }}
+                      />
                     </div>
                     <p className="text-xs text-muted-foreground/60">{stat.label}</p>
                   </div>
@@ -204,7 +366,11 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
           ))}
 
           {/* Add more */}
-          <button type="button" onClick={openAddModal} className="flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all text-muted-foreground hover:text-primary">
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all text-muted-foreground hover:text-primary"
+          >
             <Icon name="PlusCircleIcon" size={24} />
             <span className="text-xs font-medium">Add Agent</span>
           </button>
@@ -214,7 +380,9 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
       {agents.length > 0 && agents.length < 2 && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning/20">
           <Icon name="ExclamationTriangleIcon" size={16} className="text-warning flex-shrink-0" />
-          <p className="text-xs text-warning">Add at least 2 agents for a meaningful collaboration session</p>
+          <p className="text-xs text-warning">
+            Add at least 2 agents for a meaningful collaboration session
+          </p>
         </div>
       )}
 
@@ -235,21 +403,38 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
       </div>
 
       {/* Agent config modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingAgent ? `Edit ${editingAgent.name}` : 'Add New Agent'} size="lg">
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editingAgent ? `Edit ${editingAgent.name}` : 'Add New Agent'}
+        size="lg"
+      >
         <form onSubmit={handleSubmit(onSubmitAgent)} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Agent Name</label>
-              <input type="text" placeholder="e.g. Mira" className="input-base" {...register('name', { required: 'Name is required' })} />
+              <input
+                type="text"
+                placeholder="e.g. Mira"
+                className="input-base"
+                {...register('name', { required: 'Name is required' })}
+              />
               {errors.name && <p className="text-xs text-negative mt-1">{errors.name.message}</p>}
             </div>
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Model</label>
-              <select className="input-base" {...register('model')}>
-                {MODEL_OPTIONS.map((m) => (
-                  <option key={`model-${m.value}`} value={m.value}>{m.label} — {m.badge}</option>
+              <select className="input-base" {...register('model')} disabled={modelsLoading}>
+                {availableModels.map((m) => (
+                  <option key={`model-${m.id}`} value={m.id}>
+                    {m.label} — {modelBadge(m)}
+                  </option>
                 ))}
               </select>
+              {modelsError && (
+                <p className="text-xs text-warning mt-1">
+                  Ollama unreachable — showing defaults. Start Ollama to list installed models.
+                </p>
+              )}
             </div>
           </div>
 
@@ -257,8 +442,16 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
             <label className="block text-xs font-medium text-foreground mb-1.5">Role</label>
             <div className="grid grid-cols-2 gap-2">
               {ROLE_OPTIONS.map((r) => (
-                <label key={`role-opt-${r.value}`} className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${watch('role') === r.value ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-border/80'}`}>
-                  <input type="radio" value={r.value} className="mt-0.5 accent-primary" {...register('role')} />
+                <label
+                  key={`role-opt-${r.value}`}
+                  className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${watch('role') === r.value ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-border/80'}`}
+                >
+                  <input
+                    type="radio"
+                    value={r.value}
+                    className="mt-0.5 accent-primary"
+                    {...register('role')}
+                  />
                   <div>
                     <p className={`text-xs font-medium ${r.color}`}>{r.label}</p>
                     <p className="text-xs text-muted-foreground leading-relaxed">{r.description}</p>
@@ -270,25 +463,57 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
 
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Personality</label>
-            <p className="text-xs text-muted-foreground mb-1.5">Describe this agent's communication style and character</p>
-            <input type="text" placeholder="e.g. Pragmatic, detail-oriented, writes clean code and asks clarifying questions" className="input-base" {...register('personality')} />
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Describe this agent&apos;s communication style — prefilled from the role, edit freely
+            </p>
+            <input
+              type="text"
+              placeholder="e.g. Pragmatic, detail-oriented, writes clean code and asks clarifying questions"
+              className="input-base"
+              {...register('personality')}
+            />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-foreground mb-1.5">System Prompt</label>
-            <p className="text-xs text-muted-foreground mb-1.5">Optional custom instructions prepended to this agent's context</p>
-            <textarea rows={3} placeholder="You are a senior engineer who…" className="input-base resize-none" {...register('systemPrompt')} />
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              System Prompt
+            </label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Prefilled with this role&apos;s mandate. Your edits are kept when you switch roles.
+            </p>
+            <textarea
+              rows={3}
+              placeholder="You are a senior engineer who…"
+              className="input-base resize-none"
+              {...register('systemPrompt')}
+            />
           </div>
 
           <div className="space-y-4 pt-1">
-            <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Behavior Parameters</p>
-            <SliderField name="creativity" label="Creativity" description="How novel and unconventional the agent's responses are" />
-            <SliderField name="verbosity" label="Verbosity" description="How detailed and lengthy the agent's messages are" />
-            <SliderField name="assertiveness" label="Assertiveness" description="How strongly the agent defends its positions" />
+            <p className="text-xs font-semibold text-foreground uppercase tracking-wider">
+              Behavior Parameters
+            </p>
+            <SliderField
+              name="creativity"
+              label="Creativity"
+              description="How novel and unconventional the agent's responses are"
+            />
+            <SliderField
+              name="verbosity"
+              label="Verbosity"
+              description="How detailed and lengthy the agent's messages are"
+            />
+            <SliderField
+              name="assertiveness"
+              label="Assertiveness"
+              description="How strongly the agent defends its positions"
+            />
           </div>
 
           <div className="flex justify-end gap-3 pt-2 border-t border-border">
-            <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">
+              Cancel
+            </button>
             <button type="submit" className="btn-primary">
               {editingAgent ? 'Save Changes' : 'Add Agent'}
             </button>

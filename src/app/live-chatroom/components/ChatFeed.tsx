@@ -46,9 +46,13 @@ function MessageBubble({ message, isFirst }: { message: ChatMessage; isFirst: bo
         <Icon name="CheckCircleIcon" size={16} className="text-positive flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-semibold" style={{ color: message.agentColor }}>{message.agentName}</span>
+            <span className="text-xs font-semibold" style={{ color: message.agentColor }}>
+              {message.agentName}
+            </span>
             <span className="text-xs text-positive/80 font-medium">Decision</span>
-            <span className="text-xs text-muted-foreground font-mono ml-auto">{message.timestamp}</span>
+            <span className="text-xs text-muted-foreground font-mono ml-auto">
+              {message.timestamp}
+            </span>
           </div>
           <p className="text-sm text-foreground leading-relaxed">{message.content}</p>
         </div>
@@ -61,7 +65,11 @@ function MessageBubble({ message, isFirst }: { message: ChatMessage; isFirst: bo
       {isFirst && (
         <div
           className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5"
-          style={{ backgroundColor: `${message.agentColor}22`, color: message.agentColor, border: `1px solid ${message.agentColor}44` }}
+          style={{
+            backgroundColor: `${message.agentColor}22`,
+            color: message.agentColor,
+            border: `1px solid ${message.agentColor}44`,
+          }}
         >
           {message.agentName.charAt(0)}
         </div>
@@ -71,7 +79,9 @@ function MessageBubble({ message, isFirst }: { message: ChatMessage; isFirst: bo
       <div className="flex-1 min-w-0">
         {isFirst && (
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-semibold" style={{ color: message.agentColor }}>{message.agentName}</span>
+            <span className="text-sm font-semibold" style={{ color: message.agentColor }}>
+              {message.agentName}
+            </span>
             <span className="text-xs text-muted-foreground/70 px-1.5 py-0.5 rounded bg-muted/40">
               {ROLE_LABELS[message.agentRole]}
             </span>
@@ -88,13 +98,14 @@ function MessageBubble({ message, isFirst }: { message: ChatMessage; isFirst: bo
 
         {message.type === 'code' ? (
           <div>
-            {message.content.split('\n')[0].startsWith('//') || message.content.startsWith('--') || message.content.startsWith('┌') ? null : (
-              <p className="text-sm text-foreground leading-relaxed mb-1">{message.content.split('\n')[0]}</p>
+            {message.content.split('\n')[0].startsWith('//') ||
+            message.content.startsWith('--') ||
+            message.content.startsWith('┌') ? null : (
+              <p className="text-sm text-foreground leading-relaxed mb-1">
+                {message.content.split('\n')[0]}
+              </p>
             )}
-            <CodeBlock
-              content={message.content}
-              language={message.codeLanguage}
-            />
+            <CodeBlock content={message.content} language={message.codeLanguage} />
             {message.artifactId && (
               <div className="mt-2 flex items-center gap-1.5 text-xs text-accent">
                 <Icon name="DocumentArrowDownIcon" size={13} />
@@ -117,7 +128,9 @@ export default function ChatFeed({ messages, agents, sessionStatus }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  const thinkingAgents = agents.filter((a) => a.status === 'thinking' && sessionStatus === 'running');
+  const thinkingAgents = agents.filter(
+    (a) => a.status === 'thinking' && sessionStatus === 'running'
+  );
 
   // Group consecutive messages from same agent
   const grouped = messages.map((msg, i) => ({
@@ -136,12 +149,18 @@ export default function ChatFeed({ messages, agents, sessionStatus }: Props) {
         <div key={`thinking-${agent.id}`} className="flex items-center gap-3 px-4 py-2">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
-            style={{ backgroundColor: `${agent.color}22`, color: agent.color, border: `1px solid ${agent.color}44` }}
+            style={{
+              backgroundColor: `${agent.color}22`,
+              color: agent.color,
+              border: `1px solid ${agent.color}44`,
+            }}
           >
             {agent.name.charAt(0)}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold" style={{ color: agent.color }}>{agent.name}</span>
+            <span className="text-sm font-semibold" style={{ color: agent.color }}>
+              {agent.name}
+            </span>
             <div className="thinking-dots flex gap-1 items-center px-3 py-2 rounded-xl bg-muted/40">
               <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground inline-block" />
               <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground inline-block" />
@@ -155,7 +174,9 @@ export default function ChatFeed({ messages, agents, sessionStatus }: Props) {
         <div className="flex items-center justify-center py-4 mx-4">
           <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-warning/10 border border-warning/20">
             <Icon name="PauseCircleIcon" size={15} className="text-warning" />
-            <span className="text-xs text-warning font-medium">Session paused — agents are waiting</span>
+            <span className="text-xs text-warning font-medium">
+              Session paused — agents are waiting
+            </span>
           </div>
         </div>
       )}
@@ -164,7 +185,9 @@ export default function ChatFeed({ messages, agents, sessionStatus }: Props) {
         <div className="flex items-center justify-center py-4 mx-4">
           <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50 border border-border">
             <Icon name="StopCircleIcon" size={15} className="text-muted-foreground" />
-            <span className="text-xs text-muted-foreground font-medium">Session ended — compiling results…</span>
+            <span className="text-xs text-muted-foreground font-medium">
+              Session ended — compiling results…
+            </span>
           </div>
         </div>
       )}

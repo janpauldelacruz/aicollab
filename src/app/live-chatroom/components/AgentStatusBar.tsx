@@ -31,7 +31,12 @@ export default function AgentStatusBar({ agents, sessionStatus }: Props) {
         >
           <div
             className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
-            style={{ backgroundColor: `${agent.color}22`, color: agent.color, borderColor: `${agent.color}44`, border: '1px solid' }}
+            style={{
+              backgroundColor: `${agent.color}22`,
+              color: agent.color,
+              borderColor: `${agent.color}44`,
+              border: '1px solid',
+            }}
           >
             {agent.name.charAt(0)}
           </div>
@@ -53,12 +58,14 @@ export default function AgentStatusBar({ agents, sessionStatus }: Props) {
               </p>
             </div>
           </div>
-          <span className="text-xs font-mono text-muted-foreground tabular-nums ml-1">{agent.messageCount}</span>
+          <span className="text-xs font-mono text-muted-foreground tabular-nums ml-1">
+            {agent.messageCount}
+          </span>
         </div>
       ))}
       <div className="ml-auto flex-shrink-0 pl-2">
         <p className="text-xs text-muted-foreground">
-          {agents.filter(a => a.status === 'thinking' || a.status === 'speaking').length} active
+          {agents.filter((a) => a.status === 'thinking' || a.status === 'speaking').length} active
         </p>
       </div>
     </div>
