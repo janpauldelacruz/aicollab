@@ -1,6 +1,7 @@
 import { callAIEndpoint } from './aiClient';
 
 export type AIProvider = 'ANTHROPIC' | 'GEMINI' | 'OPEN_AI' | 'PERPLEXITY' | 'CUSTOM' | string;
+export type OrchestrationMode = 'round-robin' | 'parallel' | 'sequential' | 'priority' | 'reactive';
 
 export interface AIAgent {
   id: string;
@@ -11,12 +12,37 @@ export interface AIAgent {
   color: string;
   systemPrompt: string;
   apiKey?: string;
+  priority?: number; // 1 = highest priority
+  dependencies?: string[]; // agent IDs this agent waits for
 }
 
 export interface AgentMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   agentName?: string;
+}
+
+export interface ExecutionPlan {
+  mode: OrchestrationMode;
+  phases: ExecutionPhase[];
+  currentPhase: number;
+}
+
+export interface ExecutionPhase {
+  id: string;
+  label: string;
+  agentIds: string[];
+  parallel: boolean;
+  completed: boolean;
+}
+
+export interface AgentExecutionResult {
+  agentId: string;
+  agentName: string;
+  content: string;
+  durationMs: number;
+  success: boolean;
+  error?: string;
 }
 
 /** Infer provider from model string when not explicitly set */
@@ -38,6 +64,7 @@ export const REAL_AI_AGENTS: AIAgent[] = [
     model: 'claude-sonnet-4-6',
     role: 'architect',
     color: '#a78bfa',
+    priority: 1,
     systemPrompt: `You are Claude, an AI assistant made by Anthropic, participating in a collaborative AI chatroom. 
 You are working alongside Gemini (Google's AI) and ChatGPT (OpenAI's AI) to collaboratively solve problems and build things together.
 Your role is "Architect" — you focus on system design, structure, and thoughtful analysis.
@@ -51,8 +78,8 @@ Address the other AIs by name. This is a real-time multi-AI collaboration sessio
     model: 'gemini/gemini-2.5-flash',
     role: 'researcher',
     color: '#34d399',
-    systemPrompt: `You are Gemini, Google's AI assistant, participating in a collaborative AI chatroom.
-You are working alongside Claude (Anthropic's AI) and ChatGPT (OpenAI's AI) to collaboratively solve problems and build things together.
+    priority: 2,
+    systemPrompt: `You are Gemini, Google's AI assistant, participating in a collaborative AI chatroom. You are working alongside Claude (Anthropic's AI) and ChatGPT (OpenAI's AI) to collaboratively solve problems and build things together.
 Your role is "Researcher" — you focus on gathering insights, exploring possibilities, and providing broad context.
 Keep responses concise (2-4 sentences max). Be direct and collaborative. Reference what other AIs said when relevant.
 Address the other AIs by name. This is a real-time multi-AI collaboration session.`,
@@ -64,8 +91,8 @@ Address the other AIs by name. This is a real-time multi-AI collaboration sessio
     model: 'gpt-4o',
     role: 'coder',
     color: '#60a5fa',
-    systemPrompt: `You are ChatGPT, OpenAI's AI assistant, participating in a collaborative AI chatroom.
-You are working alongside Claude (Anthropic's AI) and Gemini (Google's AI) to collaboratively solve problems and build things together.
+    priority: 3,
+    systemPrompt: `You are ChatGPT, OpenAI's AI assistant, participating in a collaborative AI chatroom. You are working alongside Claude (Anthropic's AI) and Gemini (Google's AI) to collaboratively solve problems and build things together.
 Your role is "Coder" — you focus on implementation details, code, and practical execution.
 Keep responses concise (2-4 sentences max). Be direct and collaborative. Reference what other AIs said when relevant.
 Address the other AIs by name. This is a real-time multi-AI collaboration session.`,
@@ -82,6 +109,8 @@ export function buildAgentFromConfig(configAgent: {
   personality?: string;
   provider?: string;
   apiKey?: string;
+  priority?: number;
+  dependencies?: string[];
 }, allAgentNames: string[]): AIAgent {
   const otherNames = allAgentNames.filter((n) => n !== configAgent.name);
   const othersStr = otherNames.length > 0 ? otherNames.join(', ') : 'the other agents';
@@ -107,17 +136,83 @@ Address the other agents by name. This is a real-time multi-AI collaboration ses
     role: configAgent.role,
     color: agentColors[colorIndex],
     systemPrompt: configAgent.systemPrompt?.trim() || defaultSystemPrompt,
+    priority: configAgent.priority,
+    dependencies: configAgent.dependencies,
     ...(configAgent.apiKey ? { apiKey: configAgent.apiKey } : {}),
+  };
+}
+
+/** Build an execution plan based on orchestration mode and agents */
+export function buildExecutionPlan(agents: AIAgent[], mode: OrchestrationMode): ExecutionPlan {
+  if (mode === 'parallel') {
+    return {
+      mode,
+      currentPhase: 0,
+      phases: [{
+        id: 'phase-all',
+        label: 'All Agents (Parallel)',
+        agentIds: agents.map(a => a.id),
+        parallel: true,
+        completed: false,
+      }],
+    };
+  }
+
+  if (mode === 'priority') {
+    const sorted = [...agents].sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
+    return {
+      mode,
+      currentPhase: 0,
+      phases: sorted.map((agent, i) => ({
+        id: `phase-${i}`,
+        label: `${agent.name} (${agent.role})`,
+        agentIds: [agent.id],
+        parallel: false,
+        completed: false,
+      })),
+    };
+  }
+
+  if (mode === 'sequential') {
+    return {
+      mode,
+      currentPhase: 0,
+      phases: agents.map((agent, i) => ({
+        id: `phase-${i}`,
+        label: `${agent.name} (${agent.role})`,
+        agentIds: [agent.id],
+        parallel: false,
+        completed: false,
+      })),
+    };
+  }
+
+  // round-robin and reactive: single rotating phase
+  return {
+    mode,
+    currentPhase: 0,
+    phases: [{
+      id: 'phase-rotating',
+      label: 'Round Robin',
+      agentIds: agents.map(a => a.id),
+      parallel: false,
+      completed: false,
+    }],
   };
 }
 
 export async function getAgentResponse(
   agent: AIAgent,
   conversationHistory: AgentMessage[],
-  topic: string
+  topic: string,
+  injectedContext?: string
 ): Promise<string> {
+  const systemSuffix = injectedContext
+    ? `\n\n[ORCHESTRATOR DIRECTIVE]: ${injectedContext}`
+    : '';
+
   const messages: Array<{ role: string; content: string }> = [
-    { role: 'system', content: agent.systemPrompt + `\n\nThe current collaboration topic is: "${topic}"` },
+    { role: 'system', content: agent.systemPrompt + `\n\nThe current collaboration topic is: "${topic}"` + systemSuffix },
     ...conversationHistory.map((msg) => ({
       role: msg.role,
       content: msg.agentName ? `[${msg.agentName}]: ${msg.content}` : msg.content,
@@ -136,7 +231,6 @@ export async function getAgentResponse(
     parameters: { temperature: 0.8, max_tokens: 300 },
   };
 
-  // Pass per-agent API key if provided (for custom providers)
   if (agent.apiKey) {
     payload.apiKey = agent.apiKey;
   }
@@ -146,4 +240,24 @@ export async function getAgentResponse(
   const content = response?.choices?.[0]?.message?.content;
   if (!content) throw new Error(`No response from ${agent.name}`);
   return content;
+}
+
+/** Execute multiple agents in parallel and return all results */
+export async function getParallelAgentResponses(
+  agents: AIAgent[],
+  conversationHistory: AgentMessage[],
+  topic: string,
+  injectedContext?: string
+): Promise<AgentExecutionResult[]> {
+  const promises = agents.map(async (agent): Promise<AgentExecutionResult> => {
+    const start = Date.now();
+    try {
+      const content = await getAgentResponse(agent, conversationHistory, topic, injectedContext);
+      return { agentId: agent.id, agentName: agent.name, content, durationMs: Date.now() - start, success: true };
+    } catch (err: any) {
+      return { agentId: agent.id, agentName: agent.name, content: '', durationMs: Date.now() - start, success: false, error: err?.message };
+    }
+  });
+
+  return Promise.all(promises);
 }
