@@ -216,3 +216,19 @@ export function artifactsByType(session: StoredSession) {
     color: ARTIFACT_TYPE_COLORS[type],
   }));
 }
+
+/** A session counts as still live for this long after its last write. */
+export const RESUMABLE_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * The most recent session that was still in progress when the user navigated
+ * away, so the chatroom can offer to pick it back up.
+ */
+export function resumableSession(): StoredSession | null {
+  const session = loadSession();
+  if (!session) return null;
+  if (session.status !== 'running' && session.status !== 'paused') return null;
+  if (session.messages.length === 0) return null;
+  if (Date.now() - new Date(session.updatedAt).getTime() > RESUMABLE_WINDOW_MS) return null;
+  return session;
+}

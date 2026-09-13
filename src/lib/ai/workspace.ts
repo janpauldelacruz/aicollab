@@ -179,3 +179,27 @@ export function workspaceToMarkdown(workspace: Workspace): string {
     )
     .join('\n\n');
 }
+
+/** Rebuilds a workspace from the artifacts saved with a session. */
+export function workspaceFromArtifacts(
+  artifacts: Array<{
+    name: string;
+    content: string;
+    language?: string;
+    createdBy: string;
+    createdAt: string;
+  }>
+): Workspace {
+  const workspace: Workspace = {};
+  for (const artifact of artifacts) {
+    workspace[artifact.name] = {
+      name: artifact.name,
+      content: artifact.content,
+      language: artifact.language || 'text',
+      updatedBy: artifact.createdBy,
+      updatedAt: artifact.createdAt,
+      revision: 1,
+    };
+  }
+  return workspace;
+}

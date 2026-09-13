@@ -23,7 +23,12 @@ import {
 } from '@/lib/ai/multiAgentChat';
 import { consumePendingSession } from '@/lib/session/pendingSession';
 import { similarity, REPEAT_THRESHOLD } from '@/lib/ai/collaboration';
-import { DELIVERABLE_FILE, applyMessageToWorkspace, workspaceFiles } from '@/lib/ai/workspace';
+import {
+  DELIVERABLE_FILE,
+  applyMessageToWorkspace,
+  workspaceFiles,
+  workspaceFromArtifacts,
+} from '@/lib/ai/workspace';
 import type { Workspace } from '@/lib/ai/workspace';
 import type {
   AIAgent,
@@ -32,7 +37,7 @@ import type {
   OrchestrationMode,
 } from '@/lib/ai/multiAgentChat';
 import { useAvailableModels } from '@/lib/ai/models';
-import { saveSession } from '@/lib/session/sessionStore';
+import { resumableSession, saveSession } from '@/lib/session/sessionStore';
 import type { StoredSession } from '@/lib/session/sessionStore';
 
 export type AgentRole =
@@ -215,6 +220,56 @@ export default function LiveChatroomClient() {
     }
 
     toast.success(`Loaded "${pending.name || pending.topic}" — ${pending.agents.length} agents`);
+  }, []);
+
+  // Coming back to the room mid-session restores it instead of showing an empty
+  // one. It comes back paused so nothing resumes without you asking.
+  useEffect(() => {
+    if (launchedRef.current) return;
+    const previous = resumableSession();
+    if (!previous) return;
+
+    setSessionId(previous.id);
+    setStartedAt(previous.startedAt);
+    setTopic(previous.topic);
+    setTopicInput(previous.topic);
+    setElapsedSeconds(previous.elapsedSeconds);
+    setTurnCount(previous.turnCount);
+    setMessages(previous.messages as ChatMessage[]);
+    setArtifacts(previous.artifacts as Artifact[]);
+
+    const restoredWorkspace = workspaceFromArtifacts(previous.artifacts);
+    setWorkspace(restoredWorkspace);
+    workspaceRef.current = restoredWorkspace;
+
+    if (previous.agents.length > 0) {
+      setAgents(
+        previous.agents.map((a) => ({
+          id: a.id,
+          name: a.name,
+          role: a.role as AgentRole,
+          model: a.model,
+          status: 'idle' as const,
+          messageCount: a.messageCount,
+          color: a.color,
+        }))
+      );
+    }
+
+    // Rebuild enough history for the agents to carry on coherently.
+    setConversationHistory(
+      previous.messages.slice(-12).map((m) => ({
+        role: m.agentId === 'human' ? ('user' as const) : ('assistant' as const),
+        content: m.content,
+        agentName: m.agentId === 'human' ? undefined : m.agentName,
+      }))
+    );
+
+    setSessionStatus('paused');
+    toast.info(
+      `Picked up "${previous.topic.slice(0, 40)}${previous.topic.length > 40 ? '…' : ''}" — press Resume to continue`,
+      { duration: 6000 }
+    );
   }, []);
 
   // Point each agent at a model that is actually installed on the Ollama host
