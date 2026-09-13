@@ -13,7 +13,11 @@ export function SessionStatusBadge({ status }: { status: StatusType }) {
     draft: { label: 'Draft', className: 'badge-status-draft' },
     archived: { label: 'Archived', className: 'badge-status-draft' },
   };
-  const cfg = map[status];
+  // An unrecognised status must not take the whole page down.
+  const cfg = map[status] ?? {
+    label: String(status ?? 'unknown'),
+    className: 'badge-status-draft',
+  };
   return (
     <span className={cfg.className}>
       {cfg.dot && (
@@ -31,7 +35,7 @@ export function ModeBadge({ mode }: { mode: ModeType }) {
     build: { label: 'Build', className: 'badge-mode-build' },
     chat: { label: 'Chat', className: 'badge-mode-chat' },
   };
-  const cfg = map[mode];
+  const cfg = map[mode] ?? { label: String(mode ?? 'unknown'), className: 'badge-mode-build' };
   return <span className={cfg.className}>{cfg.label}</span>;
 }
 
@@ -54,5 +58,6 @@ export function RoleBadge({ role }: { role: RoleType }) {
     researcher: 'Researcher',
     architect: 'Architect',
   };
-  return <span className={map[role]}>{labels[role]}</span>;
+  // Unknown roles render plainly rather than as an unstyled blank.
+  return <span className={map[role] ?? 'badge-role-coder'}>{labels[role] ?? String(role)}</span>;
 }

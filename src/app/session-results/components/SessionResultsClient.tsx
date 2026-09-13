@@ -122,7 +122,9 @@ export default function SessionResultsClient() {
     return <EmptyState />;
   }
 
-  const status = session.status === 'running' ? 'active' : 'completed';
+  // Must be a key the badge knows — 'active' was not one, which crashed the page.
+  const status =
+    session.status === 'running' ? 'running' : session.status === 'paused' ? 'paused' : 'completed';
 
   return (
     <div className="space-y-6">
@@ -135,7 +137,7 @@ export default function SessionResultsClient() {
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-semibold text-foreground">{session.topic}</h1>
-              <SessionStatusBadge status={status as never} />
+              <SessionStatusBadge status={status} />
               <ModeBadge mode="build" />
             </div>
             <p className="text-sm text-muted-foreground mt-1">
