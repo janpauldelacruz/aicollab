@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { toast } from 'sonner';
 import Icon from '@/components/ui/AppIcon';
 import type { SessionArtifact, StoredSession } from '@/lib/session/sessionStore';
+import { exportArtifactsZip } from '@/lib/session/exportSession';
 
 interface Props {
   session: StoredSession;
@@ -62,7 +63,15 @@ export default function ResultsArtifactsTab({ session }: Props) {
           ))}
         </div>
         <button
-          onClick={() => artifacts.forEach(downloadArtifact)}
+          onClick={async () => {
+            try {
+              // One archive beats a download per file.
+              const name = await exportArtifactsZip(session);
+              toast.success(`Saved ${name} (${artifacts.length} files)`);
+            } catch (err: any) {
+              toast.error(`Export failed: ${err?.message || 'unknown error'}`);
+            }
+          }}
           disabled={artifacts.length === 0}
           className="btn-primary text-xs gap-1.5 flex-shrink-0 disabled:opacity-40"
         >

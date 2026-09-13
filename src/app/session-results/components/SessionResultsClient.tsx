@@ -16,6 +16,7 @@ import {
 } from '@/lib/session/sessionStore';
 import { useLiveData } from '@/lib/session/useLiveData';
 import type { StoredSession } from '@/lib/session/sessionStore';
+import { exportSessionZip } from '@/lib/session/exportSession';
 import ExportModal from './ExportModal';
 
 const TABS = [
@@ -44,55 +45,6 @@ function EmptyState() {
       </Link>
     </div>
   );
-}
-
-function exportSession(session: StoredSession) {
-  const lines = [
-    `# ${session.topic}`,
-    '',
-    `Started: ${new Date(session.startedAt).toLocaleString()}`,
-    `Duration: ${formatDuration(session.elapsedSeconds)}`,
-    `Agents: ${session.agents.map((a) => `${a.name} (${a.role}, ${a.model})`).join(', ')}`,
-    `Messages: ${session.messages.length}`,
-    '',
-  ];
-
-  const deliverable = session.artifacts.find((a) => a.name === 'DELIVERABLE.md');
-  if (deliverable) {
-    lines.push('## Deliverable', '', deliverable.content, '');
-  }
-
-  const files = session.artifacts.filter((a) => a.name !== 'DELIVERABLE.md');
-  if (files.length > 0) {
-    lines.push('## Files', '');
-    for (const file of files) {
-      lines.push(
-        `### ${file.name}`,
-        '',
-        `_by ${file.createdBy}_`,
-        '',
-        '```' + (file.language || ''),
-        file.content,
-        '```',
-        ''
-      );
-    }
-  }
-
-  lines.push(
-    '## Transcript',
-    '',
-    ...session.messages.map((m) => `**[${m.timestamp}] ${m.agentName}** — ${m.content}\n`)
-  );
-
-  const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${session.id}.md`;
-  link.click();
-  URL.revokeObjectURL(url);
-  toast.success('Session transcript downloaded');
 }
 
 export default function SessionResultsClient() {
@@ -171,9 +123,20 @@ export default function SessionResultsClient() {
             <Icon name="ShareIcon" size={14} />
             Share
           </Link>
-          <button onClick={() => exportSession(session)} className="btn-secondary text-xs gap-1.5">
-            <Icon name="ArrowDownTrayIcon" size={14} />
-            Quick Export
+          <button
+            onClick={async () => {
+              try {
+                const name = await exportSessionZip(session);
+                toast.success(`Saved ${name}`);
+              } catch (err: any) {
+                toast.error(`Export failed: ${err?.message || 'unknown error'}`);
+              }
+            }}
+            className="btn-secondary text-xs gap-1.5"
+            title="Transcript, deliverable and every file in one zip"
+          >
+            <Icon name="ArchiveBoxArrowDownIcon" size={14} />
+            Download All (.zip)
           </button>
           <button onClick={() => setExportModalOpen(true)} className="btn-primary text-xs gap-1.5">
             <Icon name="ArrowDownTrayIcon" size={14} />
