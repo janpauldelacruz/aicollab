@@ -142,3 +142,33 @@ You can check out the [Next.js GitHub repository](https://github.com/vercel/next
 - Styled with Tailwind CSS
 
 Built with ❤️ on Rocket.new
+## 📱 Access from anywhere (Tailscale)
+
+The app serves on all interfaces, so any device on your Tailscale network can
+reach it. Ollama itself stays bound to `127.0.0.1` — only the Next.js server
+talks to it, so your models are never exposed.
+
+| From | URL |
+| --- | --- |
+| This machine | http://localhost:4028 |
+| Same WiFi | http://192.168.50.55:4028 |
+| Anywhere (Tailscale) | http://100.90.141.101:4028 |
+
+### One-time setup on a new device
+
+1. Install Tailscale and sign in with the same account.
+2. Open the Tailscale URL above.
+
+### Running it
+
+- `npm run serve:lan` — production server bound to `0.0.0.0:4028`
+- A scheduled task named **AICollab Server** starts it at logon, so the app is
+  up whenever the PC is on.
+
+### Notes
+
+- Sessions live in each browser's local storage, so history on your phone is
+  separate from this PC. Enable the Supabase sync that ships in `supabase/` if
+  you want one shared history.
+- The PC must be awake for this to work. Check Windows sleep settings if the
+  URL stops responding while you are out.
