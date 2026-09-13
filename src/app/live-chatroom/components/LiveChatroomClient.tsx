@@ -163,6 +163,8 @@ export default function LiveChatroomClient() {
   const lastByAgentRef = useRef<Record<string, string>>({});
   const elapsedSecondsRef = useRef(elapsedSeconds);
   const orchestrationModeRef = useRef(orchestrationMode);
+  const pinnedAgentIdRef = useRef(pinnedAgentId);
+  const skippedAgentIdsRef = useRef(skippedAgentIds);
   // Upstream's orchestration code refers to the roster by this name.
   const activeAIAgentsRef = rosterRef;
 
@@ -176,6 +178,8 @@ export default function LiveChatroomClient() {
   pendingDirectiveRef.current = pendingDirective;
   elapsedSecondsRef.current = elapsedSeconds;
   orchestrationModeRef.current = orchestrationMode;
+  pinnedAgentIdRef.current = pinnedAgentId;
+  skippedAgentIdsRef.current = skippedAgentIds;
 
   // A session launched from the setup wizard must run with the topic, roster and
   // AI settings that were configured there — not the chatroom defaults.
@@ -319,6 +323,7 @@ export default function LiveChatroomClient() {
 
       const newMessages: ChatMessage[] = [];
       const newHistoryEntries: AgentMessage[] = [];
+      const touchedFiles: string[] = [];
 
       for (const result of results) {
         const aiAgent = currentAgents.find((a) => a.id === result.agentId);
@@ -346,6 +351,20 @@ export default function LiveChatroomClient() {
             agentName: aiAgent.name,
           });
           incrementAgentMessageCount(aiAgent.id);
+          lastByAgentRef.current[aiAgent.id] = result.content;
+
+          // Parallel turns write to the shared workspace too — without this the
+          // agents' FILE: blocks would be dropped in this mode.
+          const applied = applyMessageToWorkspace(
+            workspaceRef.current,
+            result.content,
+            aiAgent.name,
+            batchTimestamp
+          );
+          if (applied.touched.length > 0) {
+            workspaceRef.current = applied.workspace;
+            touchedFiles.push(...applied.touched);
+          }
 
           addExecutionEvent({
             type: 'agent_turn',
@@ -375,6 +394,11 @@ export default function LiveChatroomClient() {
 
       setMessages((prev) => [...prev, ...newMessages]);
       setConversationHistory((prev) => [...prev, ...newHistoryEntries].slice(-20));
+
+      if (touchedFiles.length > 0) {
+        setWorkspace(workspaceRef.current);
+        toast.success(`Batch wrote ${Array.from(new Set(touchedFiles)).join(', ')}`);
+      }
       setTurnCount((t) => t + 1);
 
       await new Promise((r) => setTimeout(r, 2000));
@@ -397,8 +421,32 @@ export default function LiveChatroomClient() {
     )
       return;
 
-    const agentIndex = currentAgentIndexRef.current;
-    const aiAgent: AIAgent = rosterRef.current[agentIndex];
+    const roster = rosterRef.current;
+
+    // A pinned agent always takes the turn; otherwise walk past anyone the user
+    // marked to skip. Without this the Pin and Skip buttons would do nothing.
+    let agentIndex = currentAgentIndexRef.current;
+    const pinnedId = pinnedAgentIdRef.current;
+
+    if (pinnedId) {
+      const pinned = roster.findIndex((a) => a.id === pinnedId);
+      if (pinned >= 0) agentIndex = pinned;
+    } else {
+      const skipped = skippedAgentIdsRef.current;
+      for (let step = 0; step < roster.length && skipped.includes(roster[agentIndex].id); step++) {
+        agentIndex = (agentIndex + 1) % roster.length;
+      }
+      // A skip is consumed once, not permanent.
+      const takingTurn = roster[agentIndex];
+      if (skipped.includes(takingTurn.id)) {
+        // Everyone is skipped — clear the list rather than stall the session.
+        setSkippedAgentIds([]);
+      } else if (skipped.length > 0) {
+        setSkippedAgentIds((prev) => prev.filter((id) => id !== takingTurn.id));
+      }
+    }
+
+    const aiAgent: AIAgent = roster[agentIndex];
 
     // Check for pending directive targeting this agent or all agents
     const directive = pendingDirectiveRef.current;
@@ -967,8 +1015,8 @@ export default function LiveChatroomClient() {
                     <span className="text-muted-foreground">Checking Ollama…</span>
                   ) : modelsError ? (
                     <span className="text-warning">
-                      Ollama unreachable at {ollamaBaseUrl || 'localhost:11434'} — run "ollama
-                      serve"
+                      Ollama unreachable at {ollamaBaseUrl || 'localhost:11434'} — run &ldquo;ollama
+                      serve&rdquo;
                     </span>
                   ) : (
                     <span className="text-positive">
@@ -1030,11 +1078,7 @@ export default function LiveChatroomClient() {
               </div>
             </div>
           ) : (
-            <ChatFeed
-              messages={messages}
-              agents={agents}
-              sessionStatus={sessionStatus === 'idle' ? 'stopped' : sessionStatus}
-            />
+            <ChatFeed messages={messages} agents={agents} sessionStatus={sessionStatus} />
           )}
 
           {/* Human input — join the conversation at any time */}

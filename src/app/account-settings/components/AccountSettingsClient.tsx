@@ -1,4 +1,5 @@
 'use client';
+import { toast } from 'sonner';
 import React, { useState, useEffect } from 'react';
 import Icon from '@/components/ui/AppIcon';
 import { useAuth } from '@/contexts/AuthContext';
@@ -150,7 +151,9 @@ export default function AccountSettingsClient() {
       if (stored) setModelPrefs(JSON.parse(stored));
       const storedExport = localStorage.getItem('aicollab_export_defaults');
       if (storedExport) setExportDefaults(JSON.parse(storedExport));
-    } catch {}
+    } catch {
+      // Corrupt or unavailable localStorage just means defaults are used.
+    }
   };
 
   const handleSave = async () => {
@@ -167,7 +170,10 @@ export default function AccountSettingsClient() {
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-    } catch {}
+    } catch (err: any) {
+      // Previously swallowed, so a failed save still showed "Saved".
+      toast.error(`Could not save: ${err?.message || 'unknown error'}`);
+    }
     setSaving(false);
   };
 

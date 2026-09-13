@@ -105,7 +105,7 @@ export default function Step1SessionConfig({ config, onChange, onNext }: Props) 
           Collaboration Mode
         </label>
         <p className="text-xs text-muted-foreground mb-3">
-          Sets the agents' shared objective and conversation style
+          Sets the agents&apos; shared objective and conversation style
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {MODES.map((m) => (

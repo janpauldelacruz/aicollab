@@ -261,13 +261,18 @@ export async function getSessionArtifacts(sessionId: string): Promise<DBArtifact
 
 // ─── Share Links ─────────────────────────────────────────────────────────────
 
+/**
+ * Share tokens are the only thing protecting a public session link, so they
+ * come from the platform CSPRNG. Math.random() is predictable and would let
+ * someone enumerate other people's links.
+ */
 function generateToken(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 24; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  // Rejection-free mapping is not needed here; the slight modulo bias over a
+  // 62-char alphabet leaves far more entropy than a share link requires.
+  return Array.from(bytes, (b) => chars.charAt(b % chars.length)).join('');
 }
 
 export async function createShareLink(

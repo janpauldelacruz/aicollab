@@ -256,7 +256,7 @@ export default function SessionDeliveryModal({
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {agents.length} AI agents collaborated on{' '}
-                  <span className="text-foreground font-medium">"{topic}"</span> for{' '}
+                  <span className="text-foreground font-medium">&ldquo;{topic}&rdquo;</span> for{' '}
                   {formatDuration(elapsedSeconds)}, producing {totalMessages} messages
                   {artifacts.length > 0
                     ? ` and ${artifacts.length} artifact${artifacts.length !== 1 ? 's' : ''}`

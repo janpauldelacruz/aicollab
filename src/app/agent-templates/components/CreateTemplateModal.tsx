@@ -170,7 +170,7 @@ export default function CreateTemplateModal({ open, onClose, onCreate }: Props) 
         <div>
           <label className="block text-xs font-medium text-foreground mb-1.5">Personality</label>
           <p className="text-xs text-muted-foreground mb-1.5">
-            One-line description of this agent's communication style
+            One-line description of this agent&apos;s communication style
           </p>
           <input
             type="text"
@@ -199,7 +199,7 @@ export default function CreateTemplateModal({ open, onClose, onCreate }: Props) 
         <div>
           <label className="block text-xs font-medium text-foreground mb-1.5">System Prompt</label>
           <p className="text-xs text-muted-foreground mb-1.5">
-            Custom instructions prepended to this agent's context in every session
+            Custom instructions prepended to this agent&apos;s context in every session
           </p>
           <textarea
             rows={3}

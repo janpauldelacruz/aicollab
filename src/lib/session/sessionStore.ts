@@ -55,6 +55,9 @@ const STORAGE_KEY = 'aicollab:last-session';
 const ARCHIVE_KEY = 'aicollab:sessions';
 const MAX_ARCHIVED = 25;
 
+/** Avoids logging the same quota failure on every turn. */
+let quotaWarned = false;
+
 /** Fired after a save so an open results page can refresh itself. */
 export const SESSION_UPDATED_EVENT = 'aicollab:session-updated';
 
@@ -69,8 +72,21 @@ export function saveSession(session: StoredSession): void {
     window.localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive.slice(0, MAX_ARCHIVED)));
 
     window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT));
-  } catch {
-    // Quota or private-mode failures are not worth interrupting a session for.
+    quotaWarned = false;
+  } catch (error) {
+    // A full quota silently stops a session persisting, which looks like data
+    // loss later. Drop the oldest archived sessions and retry once, then say so.
+    try {
+      const trimmed = listSessions().slice(0, 5);
+      window.localStorage.setItem(ARCHIVE_KEY, JSON.stringify(trimmed));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+      window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT));
+    } catch {
+      if (!quotaWarned) {
+        quotaWarned = true;
+        console.error('Session could not be saved — browser storage is full.', error);
+      }
+    }
   }
 }
 
