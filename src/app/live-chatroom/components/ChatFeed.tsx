@@ -36,9 +36,14 @@ function CodeBlock({ content, language }: { content: string; language?: string }
   );
 }
 
-function MessageBubble({ message, isFirst }: { message: ChatMessage; isFirst: boolean }) {
+function MessageBubble({
+  message,
+  isFirst,
+}: {
+  message: ChatMessage & { isFirst: boolean };
+  isFirst: boolean;
+}) {
   const isDecision = message.type === 'decision';
-  const isArtifact = message.type === 'artifact';
 
   if (isDecision) {
     return (
@@ -78,14 +83,27 @@ function MessageBubble({ message, isFirst }: { message: ChatMessage; isFirst: bo
 
       <div className="flex-1 min-w-0">
         {isFirst && (
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-sm font-semibold" style={{ color: message.agentColor }}>
               {message.agentName}
             </span>
             <span className="text-xs text-muted-foreground/70 px-1.5 py-0.5 rounded bg-muted/40">
-              {ROLE_LABELS[message.agentRole]}
+              {ROLE_LABELS[message.agentRole] || message.agentRole}
             </span>
+            {message.isParallel && (
+              <span className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                <Icon name="BoltIcon" size={9} />
+                parallel
+              </span>
+            )}
             <span className="text-xs text-muted-foreground font-mono">{message.timestamp}</span>
+            {message.executionMs !== undefined && (
+              <span className="text-xs text-muted-foreground/50 font-mono ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+                {message.executionMs < 1000
+                  ? `${message.executionMs}ms`
+                  : `${(message.executionMs / 1000).toFixed(1)}s`}
+              </span>
+            )}
           </div>
         )}
 
@@ -98,13 +116,6 @@ function MessageBubble({ message, isFirst }: { message: ChatMessage; isFirst: bo
 
         {message.type === 'code' ? (
           <div>
-            {message.content.split('\n')[0].startsWith('//') ||
-            message.content.startsWith('--') ||
-            message.content.startsWith('┌') ? null : (
-              <p className="text-sm text-foreground leading-relaxed mb-1">
-                {message.content.split('\n')[0]}
-              </p>
-            )}
             <CodeBlock content={message.content} language={message.codeLanguage} />
             {message.artifactId && (
               <div className="mt-2 flex items-center gap-1.5 text-xs text-accent">
@@ -132,17 +143,66 @@ export default function ChatFeed({ messages, agents, sessionStatus }: Props) {
     (a) => a.status === 'thinking' && sessionStatus === 'running'
   );
 
-  // Group consecutive messages from same agent
   const grouped = messages.map((msg, i) => ({
     ...msg,
-    isFirst: i === 0 || messages[i - 1].agentId !== msg.agentId,
+    isFirst:
+      i === 0 ||
+      messages[i - 1].agentId !== msg.agentId ||
+      messages[i - 1].isParallel !== msg.isParallel,
   }));
+
+  // Group parallel messages together visually
+  const renderMessages = () => {
+    const elements: React.ReactNode[] = [];
+    let i = 0;
+    while (i < grouped.length) {
+      const msg = grouped[i];
+      // Check if this is part of a parallel batch (same timestamp, isParallel=true)
+      if (msg.isParallel) {
+        const batchTimestamp = msg.timestamp;
+        const batchMsgs = [];
+        let j = i;
+        while (
+          j < grouped.length &&
+          grouped[j].isParallel &&
+          grouped[j].timestamp === batchTimestamp
+        ) {
+          batchMsgs.push(grouped[j]);
+          j++;
+        }
+        if (batchMsgs.length > 1) {
+          elements.push(
+            <div
+              key={`batch-${msg.id}`}
+              className="mx-4 my-2 rounded-xl border border-violet-500/20 bg-violet-500/5 overflow-hidden"
+            >
+              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-violet-500/20 bg-violet-500/10">
+                <Icon name="BoltIcon" size={11} className="text-violet-400" />
+                <span className="text-xs text-violet-400 font-medium">
+                  Parallel Response — {batchMsgs.length} agents
+                </span>
+                <span className="text-xs text-muted-foreground font-mono ml-auto">
+                  {batchTimestamp}
+                </span>
+              </div>
+              {batchMsgs.map((bMsg) => (
+                <MessageBubble key={bMsg.id} message={{ ...bMsg, isFirst: true }} isFirst={true} />
+              ))}
+            </div>
+          );
+          i = j;
+          continue;
+        }
+      }
+      elements.push(<MessageBubble key={msg.id} message={msg} isFirst={msg.isFirst} />);
+      i++;
+    }
+    return elements;
+  };
 
   return (
     <div className="flex-1 overflow-y-auto py-4 space-y-0.5">
-      {grouped.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} isFirst={msg.isFirst} />
-      ))}
+      {renderMessages()}
 
       {/* Thinking indicators */}
       {thinkingAgents.map((agent) => (

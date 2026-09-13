@@ -8,8 +8,13 @@ import ChatFeed from './ChatFeed';
 import ArtifactSidebar from './ArtifactSidebar';
 import AgentStatusBar from './AgentStatusBar';
 import SessionDeliveryModal from './SessionDeliveryModal';
+import OrchestrationPanel from './OrchestrationPanel';
+import ExecutionTimeline from './ExecutionTimeline';
 import {
   REAL_AI_AGENTS,
+  DEFAULT_RETRY_CONFIG,
+  getParallelAgentResponses,
+  getResilientAgentResponse,
   getAgentResponse,
   buildAgentsFromConfig,
   produceDeliverable,
@@ -20,7 +25,12 @@ import { consumePendingSession } from '@/lib/session/pendingSession';
 import { similarity, REPEAT_THRESHOLD } from '@/lib/ai/collaboration';
 import { DELIVERABLE_FILE, applyMessageToWorkspace, workspaceFiles } from '@/lib/ai/workspace';
 import type { Workspace } from '@/lib/ai/workspace';
-import type { AIAgent, AgentMessage } from '@/lib/ai/multiAgentChat';
+import type {
+  AIAgent,
+  AgentMessage,
+  AgentResilienceState,
+  OrchestrationMode,
+} from '@/lib/ai/multiAgentChat';
 import { useAvailableModels } from '@/lib/ai/models';
 import { saveSession } from '@/lib/session/sessionStore';
 import type { StoredSession } from '@/lib/session/sessionStore';
@@ -50,6 +60,8 @@ export interface ChatMessage {
   codeLanguage?: string;
   replyTo?: string;
   artifactId?: string;
+  isParallel?: boolean;
+  executionMs?: number;
 }
 
 export interface Artifact {
@@ -89,6 +101,7 @@ export default function LiveChatroomClient() {
     'idle'
   );
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(true);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [agents, setAgents] = useState<LiveAgent[]>(
@@ -116,7 +129,17 @@ export default function LiveChatroomClient() {
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<Workspace>({});
   const [userInput, setUserInput] = useState('');
-  const [pendingDirective, setPendingDirective] = useState<string | null>(null);
+  const [pendingDirective, setPendingDirective] = useState<{
+    text: string;
+    targetAgentId?: string | null;
+  } | null>(null);
+  const [orchestrationMode, setOrchestrationMode] = useState<OrchestrationMode>('round-robin');
+  const [pinnedAgentId, setPinnedAgentId] = useState<string | null>(null);
+  const [skippedAgentIds, setSkippedAgentIds] = useState<string[]>([]);
+  const [resilienceStates, setResilienceStates] = useState<Record<string, AgentResilienceState>>(
+    {}
+  );
+  const [executionEvents, setExecutionEvents] = useState<any[]>([]);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
   const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
@@ -128,6 +151,7 @@ export default function LiveChatroomClient() {
   const [turnCount, setTurnCount] = useState(0);
   const [maxTurns, setMaxTurns] = useState(18);
 
+  // Refs for stable closures
   const sessionStatusRef = useRef(sessionStatus);
   const isAgentRespondingRef = useRef(isAgentResponding);
   const currentAgentIndexRef = useRef(currentAgentIndex);
@@ -137,6 +161,10 @@ export default function LiveChatroomClient() {
   const workspaceRef = useRef(workspace);
   const pendingDirectiveRef = useRef(pendingDirective);
   const lastByAgentRef = useRef<Record<string, string>>({});
+  const elapsedSecondsRef = useRef(elapsedSeconds);
+  const orchestrationModeRef = useRef(orchestrationMode);
+  // Upstream's orchestration code refers to the roster by this name.
+  const activeAIAgentsRef = rosterRef;
 
   sessionStatusRef.current = sessionStatus;
   isAgentRespondingRef.current = isAgentResponding;
@@ -146,6 +174,8 @@ export default function LiveChatroomClient() {
   rosterRef.current = roster;
   workspaceRef.current = workspace;
   pendingDirectiveRef.current = pendingDirective;
+  elapsedSecondsRef.current = elapsedSeconds;
+  orchestrationModeRef.current = orchestrationMode;
 
   // A session launched from the setup wizard must run with the topic, roster and
   // AI settings that were configured there — not the chatroom defaults.
@@ -219,6 +249,11 @@ export default function LiveChatroomClient() {
     return () => clearInterval(interval);
   }, [turnStartedAt]);
 
+  /** Appends one entry to the execution timeline. */
+  const addExecutionEvent = useCallback((event: Record<string, unknown>) => {
+    setExecutionEvents((prev) => [...prev, { id: `evt-${Date.now()}-${prev.length}`, ...event }]);
+  }, []);
+
   const updateAgentStatus = useCallback((agentId: string, status: LiveAgent['status']) => {
     setAgents((prev) => prev.map((a) => (a.id === agentId ? { ...a, status } : a)));
   }, []);
@@ -229,6 +264,131 @@ export default function LiveChatroomClient() {
     );
   }, []);
 
+  /** Run parallel execution — all agents respond simultaneously */
+  const runParallelTurn = useCallback(async () => {
+    if (sessionStatusRef.current !== 'running' || isAgentRespondingRef.current) return;
+
+    const currentAgents = activeAIAgentsRef.current;
+    setIsAgentResponding(true);
+
+    // Set all agents to thinking
+    currentAgents.forEach((a) => updateAgentStatus(a.id, 'thinking'));
+
+    const directive = pendingDirectiveRef.current;
+    const injectedContext = directive ? directive.text : undefined;
+    if (directive) setPendingDirective(null);
+
+    const batchTimestamp = formatTimestamp(elapsedSecondsRef.current);
+    addExecutionEvent({
+      type: 'parallel_batch',
+      label: `Parallel batch — ${currentAgents.length} agents`,
+      timestamp: batchTimestamp,
+      parallelAgents: currentAgents.map((a) => a.name),
+    });
+
+    try {
+      const results = await getParallelAgentResponses(
+        currentAgents,
+        conversationHistoryRef.current,
+        topic,
+        injectedContext,
+        DEFAULT_RETRY_CONFIG,
+        (state) => {
+          setResilienceStates((prev) => ({ ...prev, [state.agentId]: state }));
+          if (state.status === 'retrying') {
+            toast.info(
+              `${currentAgents.find((a) => a.id === state.agentId)?.name || 'Agent'} retrying… (attempt ${state.retryCount})`
+            );
+          } else if (state.status === 'fallback_active') {
+            toast.warning(
+              `${currentAgents.find((a) => a.id === state.agentId)?.name || 'Agent'} switched to fallback provider: ${state.fallbackProvider}`
+            );
+          } else if (state.status === 'failed') {
+            toast.error(
+              `${currentAgents.find((a) => a.id === state.agentId)?.name || 'Agent'} failed after all retries`
+            );
+          }
+        }
+      );
+
+      if (sessionStatusRef.current !== 'running') {
+        setIsAgentResponding(false);
+        currentAgents.forEach((a) => updateAgentStatus(a.id, 'idle'));
+        return;
+      }
+
+      const newMessages: ChatMessage[] = [];
+      const newHistoryEntries: AgentMessage[] = [];
+
+      for (const result of results) {
+        const aiAgent = currentAgents.find((a) => a.id === result.agentId);
+        if (!aiAgent) continue;
+
+        updateAgentStatus(aiAgent.id, result.success ? 'speaking' : 'idle');
+
+        if (result.success) {
+          const msg: ChatMessage = {
+            id: `msg-${Date.now()}-${result.agentId}`,
+            agentId: aiAgent.id,
+            agentName: aiAgent.name,
+            agentRole: aiAgent.role as AgentRole,
+            agentColor: aiAgent.color,
+            content: result.content,
+            timestamp: batchTimestamp,
+            type: 'message',
+            isParallel: true,
+            executionMs: result.durationMs,
+          };
+          newMessages.push(msg);
+          newHistoryEntries.push({
+            role: 'assistant',
+            content: result.content,
+            agentName: aiAgent.name,
+          });
+          incrementAgentMessageCount(aiAgent.id);
+
+          addExecutionEvent({
+            type: 'agent_turn',
+            agentId: aiAgent.id,
+            agentName: aiAgent.name,
+            agentColor: aiAgent.color,
+            label: 'responded (parallel)',
+            detail: result.content.slice(0, 80) + (result.content.length > 80 ? '…' : ''),
+            timestamp: batchTimestamp,
+            durationMs: result.durationMs,
+            success: true,
+          });
+        } else {
+          addExecutionEvent({
+            type: 'agent_turn',
+            agentId: aiAgent.id,
+            agentName: aiAgent.name,
+            agentColor: aiAgent.color,
+            label: 'failed',
+            detail: result.error,
+            timestamp: batchTimestamp,
+            durationMs: result.durationMs,
+            success: false,
+          });
+        }
+      }
+
+      setMessages((prev) => [...prev, ...newMessages]);
+      setConversationHistory((prev) => [...prev, ...newHistoryEntries].slice(-20));
+      setTurnCount((t) => t + 1);
+
+      await new Promise((r) => setTimeout(r, 2000));
+      currentAgents.forEach((a) => updateAgentStatus(a.id, 'idle'));
+    } catch (err: any) {
+      currentAgents.forEach((a) => updateAgentStatus(a.id, 'idle'));
+      toast.error(`Parallel execution failed: ${err?.message}`);
+      setTurnCount((t) => t + 1);
+    } finally {
+      setIsAgentResponding(false);
+    }
+  }, [topic, updateAgentStatus, incrementAgentMessageCount, addExecutionEvent]);
+
+  /** Run a single agent turn (round-robin / sequential / priority / reactive) */
   const runNextAgentTurn = useCallback(async () => {
     if (
       sessionStatusRef.current !== 'running' ||
@@ -240,8 +400,18 @@ export default function LiveChatroomClient() {
     const agentIndex = currentAgentIndexRef.current;
     const aiAgent: AIAgent = rosterRef.current[agentIndex];
 
+    // Check for pending directive targeting this agent or all agents
+    const directive = pendingDirectiveRef.current;
+    const injectedContext =
+      directive && (!directive.targetAgentId || directive.targetAgentId === aiAgent.id)
+        ? directive.text
+        : undefined;
+    if (injectedContext) setPendingDirective(null);
+
     setIsAgentResponding(true);
-    setTurnStartedAt(Date.now());
+    const turnStart = Date.now();
+    const turnTimestamp = formatTimestamp(elapsedSecondsRef.current);
+    setTurnStartedAt(turnStart);
     updateAgentStatus(aiAgent.id, 'thinking');
 
     // Set others to waiting
@@ -250,23 +420,20 @@ export default function LiveChatroomClient() {
     });
 
     try {
-      const directive = pendingDirectiveRef.current;
-
-      // One retry: a single dropped connection or model hiccup should not cost a turn.
-      let response: string;
-      try {
-        response = await getAgentResponse(aiAgent, conversationHistoryRef.current, topic, {
-          workspace: workspaceRef.current,
-          userDirective: directive || undefined,
-        });
-      } catch (firstError: any) {
-        if (sessionStatusRef.current !== 'running') throw firstError;
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        response = await getAgentResponse(aiAgent, conversationHistoryRef.current, topic, {
-          workspace: workspaceRef.current,
-          userDirective: directive || undefined,
-        });
-      }
+      // Retries and backoff live in the engine now.
+      let response = await getResilientAgentResponse(
+        aiAgent,
+        conversationHistoryRef.current,
+        topic,
+        { workspace: workspaceRef.current, userDirective: injectedContext },
+        DEFAULT_RETRY_CONFIG,
+        (state) => {
+          setResilienceStates((prev) => ({ ...prev, [state.agentId]: state }));
+          if (state.status === 'retrying') {
+            toast.info(`${aiAgent.name} retrying… (attempt ${state.retryCount})`);
+          }
+        }
+      );
 
       // If the agent just restated its own last turn, give it one more shot with
       // an explicit warning before letting the repetition into the transcript.
@@ -274,12 +441,11 @@ export default function LiveChatroomClient() {
       if (previous && similarity(previous, response) > REPEAT_THRESHOLD) {
         response = await getAgentResponse(aiAgent, conversationHistoryRef.current, topic, {
           workspace: workspaceRef.current,
-          userDirective: directive || undefined,
+          userDirective: injectedContext,
           repeatWarning: true,
         });
       }
       lastByAgentRef.current[aiAgent.id] = response;
-      if (directive) setPendingDirective(null);
 
       if (sessionStatusRef.current !== 'running') {
         setIsAgentResponding(false);
@@ -287,6 +453,7 @@ export default function LiveChatroomClient() {
         return;
       }
 
+      const durationMs = Date.now() - turnStart;
       updateAgentStatus(aiAgent.id, 'speaking');
 
       const newMessage: ChatMessage = {
@@ -296,8 +463,9 @@ export default function LiveChatroomClient() {
         agentRole: AGENT_ROLE_MAP[aiAgent.id] as AgentRole,
         agentColor: aiAgent.color,
         content: response,
-        timestamp: formatTimestamp(elapsedSeconds),
+        timestamp: turnTimestamp,
         type: 'message',
+        executionMs: durationMs,
       };
 
       setMessages((prev) => [...prev, newMessage]);
@@ -368,16 +536,29 @@ export default function LiveChatroomClient() {
       setIsAgentResponding(false);
       setTurnStartedAt(null);
     }
-  }, [topic, elapsedSeconds, updateAgentStatus, incrementAgentMessageCount]);
+  }, [topic, updateAgentStatus, incrementAgentMessageCount, addExecutionEvent]);
 
-  // Auto-trigger next turn when session is running and no agent is responding
+  // Auto-trigger next turn
   useEffect(() => {
     if (sessionStatus !== 'running' || isAgentResponding || turnCount >= maxTurns) return;
     const timeout = setTimeout(() => {
-      runNextAgentTurn();
+      if (orchestrationMode === 'parallel') {
+        runParallelTurn();
+      } else {
+        runNextAgentTurn();
+      }
     }, 800);
     return () => clearTimeout(timeout);
-  }, [sessionStatus, isAgentResponding, turnCount, currentAgentIndex, runNextAgentTurn]);
+  }, [
+    sessionStatus,
+    isAgentResponding,
+    turnCount,
+    currentAgentIndex,
+    orchestrationMode,
+    runNextAgentTurn,
+    runParallelTurn,
+    maxTurns,
+  ]);
 
   // Stop when max turns reached
   useEffect(() => {
@@ -388,7 +569,7 @@ export default function LiveChatroomClient() {
       setDeliveryModalOpen(true);
       synthesizeDeliverable();
     }
-  }, [turnCount, sessionStatus, updateAgentStatus]);
+  }, [turnCount, maxTurns, sessionStatus, updateAgentStatus, addExecutionEvent]);
 
   // The Artifacts panel mirrors the shared workspace one-for-one.
   useEffect(() => {
@@ -508,6 +689,10 @@ export default function LiveChatroomClient() {
     setTurnCount(0);
     setCurrentAgentIndex(0);
     setElapsedSeconds(0);
+    setExecutionEvents([]);
+    setSkippedAgentIds([]);
+    setPinnedAgentId(null);
+    setPendingDirective(null);
     setAgents((prev) => prev.map((a) => ({ ...a, messageCount: 0, status: 'idle' })));
 
     // Seed conversation with the topic
@@ -558,10 +743,69 @@ export default function LiveChatroomClient() {
 
     setMessages((prev) => [...prev, message]);
     setConversationHistory((prev) => [...prev, { role: 'user', content: `Human: ${text}` }]);
-    setPendingDirective(text);
+    setPendingDirective({ text });
     setUserInput('');
     toast.success('Sent — the next agent will address it');
   };
+
+  const handleInjectDirective = useCallback(
+    (text: string, targetAgentId?: string) => {
+      setPendingDirective({ text, targetAgentId });
+      const targetName = targetAgentId
+        ? activeAIAgentsRef.current.find((a) => a.id === targetAgentId)?.name || 'agent'
+        : 'all agents';
+      toast.success(`Directive queued for ${targetName}`);
+      addExecutionEvent({
+        type: 'directive',
+        label: `Directive → ${targetName}`,
+        detail: text,
+        timestamp: formatTimestamp(elapsedSecondsRef.current),
+      });
+    },
+    [addExecutionEvent]
+  );
+
+  const handleSkipAgent = useCallback(
+    (agentId: string) => {
+      setSkippedAgentIds((prev) => Array.from(new Set([...prev, agentId])));
+      const name = activeAIAgentsRef.current.find((a) => a.id === agentId)?.name || 'Agent';
+      toast.info(`${name} will skip their next turn`);
+      addExecutionEvent({
+        type: 'phase_change',
+        label: `${name} skipped`,
+        timestamp: formatTimestamp(elapsedSecondsRef.current),
+      });
+    },
+    [addExecutionEvent]
+  );
+
+  const handlePinAgent = useCallback(
+    (agentId: string) => {
+      setPinnedAgentId(agentId || null);
+      if (agentId) {
+        const name = activeAIAgentsRef.current.find((a) => a.id === agentId)?.name || 'Agent';
+        toast.success(`${name} pinned — will always respond next`);
+        addExecutionEvent({
+          type: 'phase_change',
+          label: `${name} pinned`,
+          timestamp: formatTimestamp(elapsedSecondsRef.current),
+        });
+      }
+    },
+    [addExecutionEvent]
+  );
+
+  const handleOrchestrationModeChange = useCallback(
+    (mode: OrchestrationMode) => {
+      setOrchestrationMode(mode);
+      addExecutionEvent({
+        type: 'phase_change',
+        label: `Orchestration mode → ${mode}`,
+        timestamp: formatTimestamp(elapsedSecondsRef.current),
+      });
+    },
+    [addExecutionEvent]
+  );
 
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
@@ -594,9 +838,9 @@ export default function LiveChatroomClient() {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
-          {/* Session timer */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 border border-border">
+        <div className="ml-auto flex items-center gap-2">
+          {/* Timer */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 border border-border">
             <Icon name="ClockIcon" size={13} className="text-muted-foreground" />
             <span className="text-xs font-mono text-foreground tabular-nums">
               {formatElapsed(elapsedSeconds)}
@@ -604,7 +848,7 @@ export default function LiveChatroomClient() {
           </div>
 
           {/* Turn count */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 border border-border">
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 border border-border">
             <Icon name="ChatBubbleLeftRightIcon" size={13} className="text-muted-foreground" />
             <span className="text-xs font-mono text-foreground tabular-nums">
               {turnCount}/{maxTurns}
@@ -670,10 +914,31 @@ export default function LiveChatroomClient() {
       <AgentStatusBar
         agents={agents}
         sessionStatus={sessionStatus === 'idle' ? 'stopped' : sessionStatus}
+        orchestrationMode={orchestrationMode}
+        pinnedAgentId={pinnedAgentId}
+        resilienceStates={resilienceStates}
       />
 
+      {/* Orchestration controls: mode, directives, pinning, turn cap */}
+      {sessionStatus !== 'idle' && (
+        <OrchestrationPanel
+          agents={agents}
+          orchestrationMode={orchestrationMode}
+          sessionStatus={sessionStatus}
+          turnCount={turnCount}
+          maxTurns={maxTurns}
+          currentAgentIndex={currentAgentIndex}
+          onOrchestrationModeChange={setOrchestrationMode}
+          onInjectDirective={handleInjectDirective}
+          onSkipAgent={handleSkipAgent}
+          onPinAgent={handlePinAgent}
+          pinnedAgentId={pinnedAgentId}
+          onMaxTurnsChange={setMaxTurns}
+        />
+      )}
+
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Chat feed */}
         <div
           className={`flex flex-col flex-1 overflow-hidden transition-all duration-300 ${artifactPanelOpen ? '' : 'w-full'}`}
@@ -815,7 +1080,7 @@ export default function LiveChatroomClient() {
               )}
               {pendingDirective && (
                 <p className="text-xs text-warning mt-1.5">
-                  Queued for the next agent: “{pendingDirective}”
+                  Queued for the next agent: “{pendingDirective.text}”
                 </p>
               )}
             </div>
@@ -841,6 +1106,16 @@ export default function LiveChatroomClient() {
           <div className="w-80 xl:w-96 flex-shrink-0 border-l border-border overflow-hidden flex flex-col">
             <ArtifactSidebar artifacts={artifacts} />
           </div>
+        )}
+
+        {/* Execution timeline overlay */}
+        {timelineOpen && (
+          <ExecutionTimeline
+            events={executionEvents}
+            agents={agents}
+            isOpen={timelineOpen}
+            onClose={() => setTimelineOpen(false)}
+          />
         )}
       </div>
     </div>

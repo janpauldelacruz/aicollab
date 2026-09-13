@@ -5,6 +5,63 @@ import type { Workspace } from './workspace';
 
 export type AIProvider = 'OLLAMA' | 'ANTHROPIC' | 'GEMINI' | 'OPEN_AI' | 'PERPLEXITY';
 
+/** How turns are ordered across the roster. */
+export type OrchestrationMode = 'round-robin' | 'parallel' | 'sequential' | 'priority' | 'reactive';
+
+export type AgentErrorType =
+  'timeout' | 'connection_drop' | 'rate_limit' | 'auth_error' | 'model_unavailable' | 'unknown';
+
+export interface AgentRetryConfig {
+  maxRetries: number;
+  baseDelayMs: number;
+  timeoutMs: number;
+}
+
+export interface AgentResilienceState {
+  agentId: string;
+  retryCount: number;
+  lastError: string | null;
+  errorType: AgentErrorType | null;
+  isFallback: boolean;
+  fallbackProvider: AIProvider | null;
+  status: 'idle' | 'retrying' | 'failed' | 'fallback_active';
+}
+
+/**
+ * Local models are slow but never rate-limit, so the timeout is generous and
+ * retries are few — a hung Ollama is better surfaced than retried into.
+ */
+export const DEFAULT_RETRY_CONFIG: AgentRetryConfig = {
+  maxRetries: 2,
+  baseDelayMs: 1500,
+  timeoutMs: 180000,
+};
+
+export interface ExecutionPhase {
+  id: string;
+  label: string;
+  agentIds: string[];
+  parallel: boolean;
+  completed: boolean;
+}
+
+export interface ExecutionPlan {
+  mode: OrchestrationMode;
+  phases: ExecutionPhase[];
+  currentPhase: number;
+}
+
+export interface AgentExecutionResult {
+  agentId: string;
+  agentName: string;
+  content: string;
+  durationMs: number;
+  success: boolean;
+  error?: string;
+  errorType?: AgentErrorType;
+  retryCount?: number;
+}
+
 /**
  * Works out which provider a model tag belongs to. Ollama tags carry a colon
  * ("qwen2.5:7b") and stay local; anything matching a hosted family is routed to
@@ -43,6 +100,8 @@ export interface AIAgent {
   color: string;
   systemPrompt: string;
   settings?: AgentSettings;
+  /** Lower runs first in "priority" mode. */
+  priority?: number;
 }
 
 /**
@@ -302,6 +361,71 @@ export interface TurnOptions {
   userDirective?: string;
 }
 
+// ─── Execution plan ───────────────────────────────────────────────────────────
+
+export function buildExecutionPlan(agents: AIAgent[], mode: OrchestrationMode): ExecutionPlan {
+  if (mode === 'parallel') {
+    return {
+      mode,
+      currentPhase: 0,
+      phases: [
+        {
+          id: 'phase-all',
+          label: 'All Agents (Parallel)',
+          agentIds: agents.map((a) => a.id),
+          parallel: true,
+          completed: false,
+        },
+      ],
+    };
+  }
+
+  if (mode === 'priority') {
+    const sorted = [...agents].sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
+    return {
+      mode,
+      currentPhase: 0,
+      phases: sorted.map((agent, i) => ({
+        id: `phase-${i}`,
+        label: `${agent.name} (${agent.role})`,
+        agentIds: [agent.id],
+        parallel: false,
+        completed: false,
+      })),
+    };
+  }
+
+  if (mode === 'sequential') {
+    return {
+      mode,
+      currentPhase: 0,
+      phases: agents.map((agent, i) => ({
+        id: `phase-${i}`,
+        label: `${agent.name} (${agent.role})`,
+        agentIds: [agent.id],
+        parallel: false,
+        completed: false,
+      })),
+    };
+  }
+
+  return {
+    mode,
+    currentPhase: 0,
+    phases: [
+      {
+        id: 'phase-rotating',
+        label: 'Round Robin',
+        agentIds: agents.map((a) => a.id),
+        parallel: false,
+        completed: false,
+      },
+    ],
+  };
+}
+
+// ─── Core agent call (single attempt) ────────────────────────────────────────
+
 export async function getAgentResponse(
   agent: AIAgent,
   conversationHistory: AgentMessage[],
@@ -364,6 +488,126 @@ export async function getAgentResponse(
   const content = response?.choices?.[0]?.message?.content;
   if (!content) throw new Error(`No response from ${agent.name}`);
   return stripSpeakerPrefix(content, agent.name);
+}
+
+/** Classifies a failure so the UI can say something useful about it. */
+export function classifyAgentError(message: string): AgentErrorType {
+  const m = message.toLowerCase();
+  if (m.includes('timed out') || m.includes('timeout')) return 'timeout';
+  if (m.includes('cannot reach') || m.includes('econnrefused') || m.includes('fetch failed'))
+    return 'connection_drop';
+  if (m.includes('429') || m.includes('rate limit')) return 'rate_limit';
+  if (m.includes('401') || m.includes('api key') || m.includes('unauthor')) return 'auth_error';
+  if (m.includes('not found') || m.includes('no such model')) return 'model_unavailable';
+  return 'unknown';
+}
+
+/**
+ * One agent turn with bounded retries and exponential backoff.
+ * A missing model or a bad key is not retried — those never fix themselves.
+ */
+export async function getResilientAgentResponse(
+  agent: AIAgent,
+  conversationHistory: AgentMessage[],
+  topic: string,
+  options: TurnOptions = {},
+  retryConfig: AgentRetryConfig = DEFAULT_RETRY_CONFIG,
+  onRetry?: (state: AgentResilienceState) => void
+): Promise<string> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
+    try {
+      return await getAgentResponse(agent, conversationHistory, topic, options);
+    } catch (error: any) {
+      lastError = error;
+      const errorType = classifyAgentError(error?.message || '');
+
+      // Config problems cannot be retried away.
+      if (errorType === 'auth_error' || errorType === 'model_unavailable') break;
+      if (attempt === retryConfig.maxRetries) break;
+
+      onRetry?.({
+        agentId: agent.id,
+        retryCount: attempt + 1,
+        lastError: error?.message ?? null,
+        errorType,
+        isFallback: false,
+        fallbackProvider: null,
+        status: 'retrying',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, retryConfig.baseDelayMs * 2 ** attempt));
+    }
+  }
+
+  onRetry?.({
+    agentId: agent.id,
+    retryCount: retryConfig.maxRetries,
+    lastError: (lastError as Error)?.message ?? null,
+    errorType: classifyAgentError((lastError as Error)?.message || ''),
+    isFallback: false,
+    fallbackProvider: null,
+    status: 'failed',
+  });
+
+  throw lastError;
+}
+
+/**
+ * Parallel mode: every agent answers the same state at once.
+ * One agent failing does not take the batch down.
+ */
+export async function getParallelAgentResponses(
+  agents: AIAgent[],
+  conversationHistory: AgentMessage[],
+  topic: string,
+  injectedContext?: string,
+  retryConfig: AgentRetryConfig = DEFAULT_RETRY_CONFIG,
+  onRetry?: (state: AgentResilienceState) => void,
+  workspace?: Workspace
+): Promise<AgentExecutionResult[]> {
+  return Promise.all(
+    agents.map(async (agent): Promise<AgentExecutionResult> => {
+      const start = Date.now();
+      let retryCount = 0;
+
+      const trackRetry = (state: AgentResilienceState) => {
+        retryCount = state.retryCount;
+        onRetry?.(state);
+      };
+
+      try {
+        const content = await getResilientAgentResponse(
+          agent,
+          conversationHistory,
+          topic,
+          { workspace, userDirective: injectedContext },
+          retryConfig,
+          trackRetry
+        );
+        return {
+          agentId: agent.id,
+          agentName: agent.name,
+          content,
+          durationMs: Date.now() - start,
+          success: true,
+          retryCount,
+        };
+      } catch (err: any) {
+        return {
+          agentId: agent.id,
+          agentName: agent.name,
+          content: '',
+          durationMs: Date.now() - start,
+          success: false,
+          error: err?.message,
+          errorType: classifyAgentError(err?.message || ''),
+          retryCount,
+        };
+      }
+    })
+  );
 }
 
 /**
