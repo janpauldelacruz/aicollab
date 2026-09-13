@@ -2,13 +2,14 @@
 import React from 'react';
 import Icon from '@/components/ui/AppIcon';
 import type { LiveAgent } from './LiveChatroomClient';
-import type { OrchestrationMode } from '@/lib/ai/multiAgentChat';
+import type { OrchestrationMode, AgentResilienceState } from '@/lib/ai/multiAgentChat';
 
 interface Props {
   agents: LiveAgent[];
   sessionStatus: 'running' | 'paused' | 'stopped';
   orchestrationMode?: OrchestrationMode;
   pinnedAgentId?: string | null;
+  resilienceStates?: Record<string, AgentResilienceState>;
 }
 
 const STATUS_LABELS: Record<LiveAgent['status'], string> = {
@@ -25,7 +26,7 @@ const STATUS_COLORS: Record<LiveAgent['status'], string> = {
   waiting: 'text-muted-foreground/50',
 };
 
-export default function AgentStatusBar({ agents, sessionStatus, orchestrationMode, pinnedAgentId }: Props) {
+export default function AgentStatusBar({ agents, sessionStatus, orchestrationMode, pinnedAgentId, resilienceStates = {} }: Props) {
   const activeCount = agents.filter(a => a.status === 'thinking' || a.status === 'speaking').length;
   const isParallel = orchestrationMode === 'parallel';
 
@@ -33,11 +34,21 @@ export default function AgentStatusBar({ agents, sessionStatus, orchestrationMod
     <div className="flex items-center gap-1 px-4 py-2 border-b border-border bg-card/40 overflow-x-auto flex-shrink-0">
       {agents.map((agent) => {
         const isPinned = pinnedAgentId === agent.id;
+        const resilience = resilienceStates[agent.id];
+        const isRetrying = resilience?.status === 'retrying';
+        const isFallback = resilience?.status === 'fallback_active';
+        const isFailed = resilience?.status === 'failed';
+
         return (
           <div
             key={agent.id}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border flex-shrink-0 transition-all ${
-              isPinned ? 'border-warning/40 bg-warning/5' : 'border-border bg-muted/30'
+              isFailed
+                ? 'border-destructive/40 bg-destructive/5'
+                : isRetrying || isFallback
+                ? 'border-amber-500/40 bg-amber-500/5'
+                : isPinned
+                ? 'border-warning/40 bg-warning/5' :'border-border bg-muted/30'
             }`}
           >
             <div
@@ -50,6 +61,15 @@ export default function AgentStatusBar({ agents, sessionStatus, orchestrationMod
               <div className="flex items-center gap-1">
                 <p className="text-xs font-medium text-foreground">{agent.name}</p>
                 {isPinned && <Icon name="LockClosedIcon" size={9} className="text-warning flex-shrink-0" />}
+                {isRetrying && (
+                  <span className="text-xs text-amber-400 font-medium">↺ retry {resilience.retryCount}</span>
+                )}
+                {isFallback && (
+                  <span className="text-xs text-amber-400 font-medium">⇄ {resilience.fallbackProvider}</span>
+                )}
+                {isFailed && (
+                  <span className="text-xs text-destructive font-medium">✕ failed</span>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 {agent.status === 'thinking' && sessionStatus === 'running' && (
@@ -62,8 +82,15 @@ export default function AgentStatusBar({ agents, sessionStatus, orchestrationMod
                 {agent.status === 'speaking' && sessionStatus === 'running' && (
                   <span className="w-1.5 h-1.5 rounded-full bg-positive live-indicator inline-block" />
                 )}
-                <p className={`text-xs ${STATUS_COLORS[agent.status]}`}>
-                  {sessionStatus !== 'running' ? 'Paused' : STATUS_LABELS[agent.status]}
+                <p className={`text-xs ${isFailed ? 'text-destructive' : isRetrying || isFallback ? 'text-amber-400' : STATUS_COLORS[agent.status]}`}>
+                  {isFailed
+                    ? resilience.lastError?.slice(0, 30) || 'Error'
+                    : isRetrying
+                    ? `Retrying (${resilience.retryCount}/3)…`
+                    : isFallback
+                    ? `Fallback: ${resilience.fallbackProvider}`
+                    : sessionStatus !== 'running' ?'Paused'
+                    : STATUS_LABELS[agent.status]}
                 </p>
               </div>
             </div>

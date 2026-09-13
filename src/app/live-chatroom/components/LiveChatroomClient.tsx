@@ -16,8 +16,9 @@ import {
   getAgentResponse,
   getParallelAgentResponses,
   buildAgentFromConfig,
+  DEFAULT_RETRY_CONFIG,
 } from '@/lib/ai/multiAgentChat';
-import type { AIAgent, AgentMessage, OrchestrationMode } from '@/lib/ai/multiAgentChat';
+import type { AIAgent, AgentMessage, OrchestrationMode, AgentResilienceState } from '@/lib/ai/multiAgentChat';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   updateSessionStatus,
@@ -106,6 +107,9 @@ export default function LiveChatroomClient() {
   const [pendingDirective, setPendingDirective] = useState<{ text: string; targetAgentId?: string } | null>(null);
   const [executionEvents, setExecutionEvents] = useState<ExecutionEvent[]>([]);
   const [maxTurns, setMaxTurns] = useState(50);
+
+  // Resilience state: tracks retry/fallback status per agent
+  const [resilienceStates, setResilienceStates] = useState<Record<string, AgentResilienceState>>({});
 
   // Active AI agents — prefer session config agents, fall back to default 3
   const [activeAIAgents, setActiveAIAgents] = useState<AIAgent[]>(REAL_AI_AGENTS);
@@ -228,7 +232,18 @@ export default function LiveChatroomClient() {
         currentAgents,
         conversationHistoryRef.current,
         topic,
-        injectedContext
+        injectedContext,
+        DEFAULT_RETRY_CONFIG,
+        (state) => {
+          setResilienceStates(prev => ({ ...prev, [state.agentId]: state }));
+          if (state.status === 'retrying') {
+            toast.info(`${currentAgents.find(a => a.id === state.agentId)?.name || 'Agent'} retrying… (attempt ${state.retryCount})`);
+          } else if (state.status === 'fallback_active') {
+            toast.warning(`${currentAgents.find(a => a.id === state.agentId)?.name || 'Agent'} switched to fallback provider: ${state.fallbackProvider}`);
+          } else if (state.status === 'failed') {
+            toast.error(`${currentAgents.find(a => a.id === state.agentId)?.name || 'Agent'} failed after all retries`);
+          }
+        }
       );
 
       if (sessionStatusRef.current !== 'running') {
@@ -364,7 +379,18 @@ export default function LiveChatroomClient() {
         aiAgent,
         conversationHistoryRef.current,
         topic,
-        injectedContext
+        injectedContext,
+        DEFAULT_RETRY_CONFIG,
+        (state) => {
+          setResilienceStates(prev => ({ ...prev, [state.agentId]: state }));
+          if (state.status === 'retrying') {
+            toast.info(`${aiAgent.name} retrying… (attempt ${state.retryCount})`);
+          } else if (state.status === 'fallback_active') {
+            toast.warning(`${aiAgent.name} switched to fallback provider: ${state.fallbackProvider}`);
+          } else if (state.status === 'failed') {
+            toast.error(`${aiAgent.name} failed after all retries`);
+          }
+        }
       );
 
       if (sessionStatusRef.current !== 'running') {
@@ -705,6 +731,7 @@ export default function LiveChatroomClient() {
         sessionStatus={sessionStatus === 'idle' ? 'stopped' : sessionStatus}
         orchestrationMode={orchestrationMode}
         pinnedAgentId={pinnedAgentId}
+        resilienceStates={resilienceStates}
       />
 
       {/* Orchestration panel */}

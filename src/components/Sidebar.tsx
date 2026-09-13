@@ -20,6 +20,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Session Results', href: '/session-results', icon: 'BarChart2Icon', group: 'library' },
   { label: 'Past Collaborations', href: '/past-collaborations', icon: 'ClockIcon', group: 'library' },
   { label: 'Share Session', href: '/share-session', icon: 'ShareIcon', group: 'library' },
+  { label: 'API Keys', href: '/api-keys', icon: 'KeyIcon', group: 'account' },
   { label: 'Account Settings', href: '/account-settings', icon: 'SettingsIcon', group: 'account' },
 ];
 

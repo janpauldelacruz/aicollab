@@ -3,6 +3,37 @@ import { callAIEndpoint } from './aiClient';
 export type AIProvider = 'ANTHROPIC' | 'GEMINI' | 'OPEN_AI' | 'PERPLEXITY' | 'CUSTOM' | string;
 export type OrchestrationMode = 'round-robin' | 'parallel' | 'sequential' | 'priority' | 'reactive';
 
+// ─── Resilience types ────────────────────────────────────────────────────────
+
+export type AgentErrorType =
+  | 'timeout' |'connection_drop' |'rate_limit' |'auth_error' |'model_unavailable' |'unknown';
+
+export interface AgentRetryConfig {
+  maxRetries: number;       // default 3
+  baseDelayMs: number;      // default 1000
+  timeoutMs: number;        // default 30000
+  fallbackProviders?: AIProvider[];
+}
+
+export interface AgentResilienceState {
+  agentId: string;
+  retryCount: number;
+  lastError: string | null;
+  errorType: AgentErrorType | null;
+  isFallback: boolean;
+  fallbackProvider: AIProvider | null;
+  status: 'idle' | 'retrying' | 'failed' | 'fallback_active';
+}
+
+export const DEFAULT_RETRY_CONFIG: AgentRetryConfig = {
+  maxRetries: 3,
+  baseDelayMs: 1000,
+  timeoutMs: 30000,
+  fallbackProviders: ['OPEN_AI', 'ANTHROPIC', 'GEMINI'],
+};
+
+// ─── Existing types ───────────────────────────────────────────────────────────
+
 export interface AIAgent {
   id: string;
   name: string;
@@ -12,8 +43,8 @@ export interface AIAgent {
   color: string;
   systemPrompt: string;
   apiKey?: string;
-  priority?: number; // 1 = highest priority
-  dependencies?: string[]; // agent IDs this agent waits for
+  priority?: number;
+  dependencies?: string[];
 }
 
 export interface AgentMessage {
@@ -43,9 +74,40 @@ export interface AgentExecutionResult {
   durationMs: number;
   success: boolean;
   error?: string;
+  errorType?: AgentErrorType;
+  retryCount?: number;
+  usedFallback?: boolean;
+  fallbackProvider?: AIProvider;
 }
 
-/** Infer provider from model string when not explicitly set */
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function classifyError(err: any): AgentErrorType {
+  const msg = (err?.message || '').toLowerCase();
+  if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('aborted')) return 'timeout';
+  if (msg.includes('network') || msg.includes('fetch') || msg.includes('connection') || msg.includes('econnreset')) return 'connection_drop';
+  if (msg.includes('rate limit') || msg.includes('429') || msg.includes('too many requests')) return 'rate_limit';
+  if (msg.includes('401') || msg.includes('403') || msg.includes('unauthorized') || msg.includes('api key')) return 'auth_error';
+  if (msg.includes('model') || msg.includes('404') || msg.includes('not found')) return 'model_unavailable';
+  return 'unknown';
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Request timed out after ${ms}ms`)), ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
+
+// ─── Provider inference ───────────────────────────────────────────────────────
+
 export function inferProvider(model: string): AIProvider {
   const m = model.toLowerCase();
   if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('text-')) return 'OPEN_AI';
@@ -55,6 +117,17 @@ export function inferProvider(model: string): AIProvider {
   if (m.startsWith('llama') || m.startsWith('mistral') || m.startsWith('mixtral')) return 'OPEN_AI';
   return 'OPEN_AI';
 }
+
+// ─── Default fallback model per provider ─────────────────────────────────────
+
+const FALLBACK_MODELS: Record<string, string> = {
+  OPEN_AI: 'gpt-4o',
+  ANTHROPIC: 'claude-sonnet-4-6',
+  GEMINI: 'gemini/gemini-2.5-flash',
+  PERPLEXITY: 'llama-3.1-sonar-small-128k-online',
+};
+
+// ─── Real agents ──────────────────────────────────────────────────────────────
 
 export const REAL_AI_AGENTS: AIAgent[] = [
   {
@@ -99,7 +172,8 @@ Address the other AIs by name. This is a real-time multi-AI collaboration sessio
   },
 ];
 
-/** Build a dynamic AIAgent from session config agent data */
+// ─── Build agent from config ──────────────────────────────────────────────────
+
 export function buildAgentFromConfig(configAgent: {
   id: string;
   name: string;
@@ -142,7 +216,8 @@ Address the other agents by name. This is a real-time multi-AI collaboration ses
   };
 }
 
-/** Build an execution plan based on orchestration mode and agents */
+// ─── Execution plan ───────────────────────────────────────────────────────────
+
 export function buildExecutionPlan(agents: AIAgent[], mode: OrchestrationMode): ExecutionPlan {
   if (mode === 'parallel') {
     return {
@@ -187,7 +262,6 @@ export function buildExecutionPlan(agents: AIAgent[], mode: OrchestrationMode): 
     };
   }
 
-  // round-robin and reactive: single rotating phase
   return {
     mode,
     currentPhase: 0,
@@ -201,15 +275,23 @@ export function buildExecutionPlan(agents: AIAgent[], mode: OrchestrationMode): 
   };
 }
 
-export async function getAgentResponse(
+// ─── Core agent call (single attempt) ────────────────────────────────────────
+
+async function callAgent(
   agent: AIAgent,
   conversationHistory: AgentMessage[],
   topic: string,
-  injectedContext?: string
+  injectedContext?: string,
+  overrideProvider?: AIProvider,
+  overrideModel?: string,
+  timeoutMs = DEFAULT_RETRY_CONFIG.timeoutMs
 ): Promise<string> {
   const systemSuffix = injectedContext
     ? `\n\n[ORCHESTRATOR DIRECTIVE]: ${injectedContext}`
     : '';
+
+  const effectiveProvider = overrideProvider ?? agent.provider;
+  const effectiveModel = overrideModel ?? agent.model;
 
   const messages: Array<{ role: string; content: string }> = [
     { role: 'system', content: agent.systemPrompt + `\n\nThe current collaboration topic is: "${topic}"` + systemSuffix },
@@ -224,38 +306,162 @@ export async function getAgentResponse(
   ];
 
   const payload: Record<string, unknown> = {
-    provider: agent.provider,
-    model: agent.model,
+    provider: effectiveProvider,
+    model: effectiveModel,
     messages,
     stream: false,
     parameters: { temperature: 0.8, max_tokens: 300 },
   };
 
-  if (agent.apiKey) {
-    payload.apiKey = agent.apiKey;
-  }
+  if (agent.apiKey) payload.apiKey = agent.apiKey;
 
-  const response = await callAIEndpoint('/api/ai/chat-completion', payload);
+  const response = await withTimeout(
+    callAIEndpoint('/api/ai/chat-completion', payload),
+    timeoutMs
+  );
 
   const content = response?.choices?.[0]?.message?.content;
   if (!content) throw new Error(`No response from ${agent.name}`);
   return content;
 }
 
-/** Execute multiple agents in parallel and return all results */
+// ─── Resilient agent response (with retries + fallback) ──────────────────────
+
+export async function getAgentResponse(
+  agent: AIAgent,
+  conversationHistory: AgentMessage[],
+  topic: string,
+  injectedContext?: string,
+  retryConfig: AgentRetryConfig = DEFAULT_RETRY_CONFIG,
+  onRetry?: (state: AgentResilienceState) => void
+): Promise<string> {
+  let lastError: any = null;
+  let usedFallback = false;
+  let fallbackProvider: AIProvider | null = null;
+
+  // Primary attempts
+  for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = retryConfig.baseDelayMs * Math.pow(2, attempt - 1); // exponential backoff
+      await sleep(delay);
+      onRetry?.({
+        agentId: agent.id,
+        retryCount: attempt,
+        lastError: lastError?.message || null,
+        errorType: classifyError(lastError),
+        isFallback: false,
+        fallbackProvider: null,
+        status: 'retrying',
+      });
+    }
+
+    try {
+      return await callAgent(agent, conversationHistory, topic, injectedContext, undefined, undefined, retryConfig.timeoutMs);
+    } catch (err: any) {
+      lastError = err;
+      const errType = classifyError(err);
+      // Don't retry auth errors — they won't self-heal
+      if (errType === 'auth_error') break;
+    }
+  }
+
+  // Fallback routing: try alternative providers
+  const fallbacks = (retryConfig.fallbackProviders || []).filter(
+    (p) => p !== agent.provider
+  );
+
+  for (const fbProvider of fallbacks) {
+    const fbModel = FALLBACK_MODELS[fbProvider];
+    if (!fbModel) continue;
+
+    onRetry?.({
+      agentId: agent.id,
+      retryCount: retryConfig.maxRetries,
+      lastError: lastError?.message || null,
+      errorType: classifyError(lastError),
+      isFallback: true,
+      fallbackProvider: fbProvider,
+      status: 'fallback_active',
+    });
+
+    try {
+      const result = await callAgent(
+        agent, conversationHistory, topic, injectedContext,
+        fbProvider, fbModel, retryConfig.timeoutMs
+      );
+      usedFallback = true;
+      fallbackProvider = fbProvider;
+      return result;
+    } catch {
+      // try next fallback
+    }
+  }
+
+  // All attempts exhausted
+  onRetry?.({
+    agentId: agent.id,
+    retryCount: retryConfig.maxRetries,
+    lastError: lastError?.message || null,
+    errorType: classifyError(lastError),
+    isFallback: false,
+    fallbackProvider: null,
+    status: 'failed',
+  });
+
+  throw lastError || new Error(`${agent.name} failed after all retries`);
+}
+
+// ─── Parallel execution with resilience ──────────────────────────────────────
+
 export async function getParallelAgentResponses(
   agents: AIAgent[],
   conversationHistory: AgentMessage[],
   topic: string,
-  injectedContext?: string
+  injectedContext?: string,
+  retryConfig: AgentRetryConfig = DEFAULT_RETRY_CONFIG,
+  onRetry?: (state: AgentResilienceState) => void
 ): Promise<AgentExecutionResult[]> {
   const promises = agents.map(async (agent): Promise<AgentExecutionResult> => {
     const start = Date.now();
+    let retryCount = 0;
+    let usedFallback = false;
+    let fallbackProvider: AIProvider | undefined;
+
+    const trackRetry = (state: AgentResilienceState) => {
+      retryCount = state.retryCount;
+      if (state.isFallback && state.fallbackProvider) {
+        usedFallback = true;
+        fallbackProvider = state.fallbackProvider;
+      }
+      onRetry?.(state);
+    };
+
     try {
-      const content = await getAgentResponse(agent, conversationHistory, topic, injectedContext);
-      return { agentId: agent.id, agentName: agent.name, content, durationMs: Date.now() - start, success: true };
+      const content = await getAgentResponse(
+        agent, conversationHistory, topic, injectedContext, retryConfig, trackRetry
+      );
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        content,
+        durationMs: Date.now() - start,
+        success: true,
+        retryCount,
+        usedFallback,
+        fallbackProvider,
+      };
     } catch (err: any) {
-      return { agentId: agent.id, agentName: agent.name, content: '', durationMs: Date.now() - start, success: false, error: err?.message };
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        content: '',
+        durationMs: Date.now() - start,
+        success: false,
+        error: err?.message,
+        errorType: classifyError(err),
+        retryCount,
+        usedFallback,
+      };
     }
   });
 
