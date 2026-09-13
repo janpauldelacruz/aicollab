@@ -196,7 +196,8 @@ export default function OrchestrationPanel({
                 <button
                   key={mode.value}
                   onClick={() => onOrchestrationModeChange(mode.value)}
-                  disabled={sessionStatus === 'running'}
+                  // Switching mid-session is safe: the turn dispatcher reads the
+                  // mode between turns, never during one.
                   className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-center transition-all text-xs ${
                     orchestrationMode === mode.value
                       ? 'border-accent/50 bg-accent/10 text-accent'
