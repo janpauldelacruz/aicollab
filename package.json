@@ -1,6 +1,18 @@
 {
   "name": "aicollab",
   "version": "0.1.0",
+  "description": "Run a team of AI agents that build together on local Ollama models, producing files rather than a transcript.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/janpauldelacruz/aicollab.git"
+  },
+  "keywords": [
+    "ollama",
+    "local-llm",
+    "multi-agent",
+    "ai-agents",
+    "nextjs"
+  ],
   "private": true,
   "rocketCritical": {
     "dependencies": [
