@@ -79,6 +79,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Sign Out
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
+    if (!error && typeof window !== 'undefined') {
+      window.location.href = '/sign-up-login';
+    }
     if (error) throw error;
   };
 

@@ -5,6 +5,8 @@ import AppLogo from '@/components/ui/AppLogo';
 import Icon from '@/components/ui/AppIcon';
 import { listSessions } from '@/lib/session/sessionStore';
 import { useLiveData } from '@/lib/session/useLiveData';
+import { useAuth } from '@/contexts/AuthContext';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 interface NavItem {
   label: string;
@@ -54,6 +56,17 @@ export default function Sidebar({
     ).length;
   }, []);
   const [liveCount] = useLiveData<number>(readLiveCount, 0);
+  const { user, signOut } = useAuth();
+
+  const email: string | undefined = user?.email;
+  const displayName: string =
+    user?.user_metadata?.full_name || email?.split('@')[0] || 'Local user';
+  const initials = displayName
+    .split(/[\s.@_-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part[0]?.toUpperCase())
+    .join('');
 
   const withBadges = NAV_ITEMS.map((item) =>
     item.href === '/live-chatroom' && liveCount > 0 ? { ...item, badge: liveCount } : item
@@ -147,23 +160,32 @@ export default function Sidebar({
           className={`border-t border-border p-2 flex-shrink-0 ${collapsed ? 'flex justify-center' : ''}`}
         >
           {collapsed ? (
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-              <span className="text-xs font-semibold text-primary">JL</span>
+            <div
+              className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center"
+              title={displayName}
+            >
+              <span className="text-xs font-semibold text-primary">{initials || 'U'}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-muted transition-colors cursor-pointer">
+            <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg">
               <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-semibold text-primary">JL</span>
+                <span className="text-xs font-semibold text-primary">{initials || 'U'}</span>
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">Jamie Lin</p>
-                <p className="text-xs text-muted-foreground truncate">Pro Plan</p>
+                <p className="text-xs font-medium text-foreground truncate">{displayName}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {email ?? (isSupabaseConfigured ? 'Signed out' : 'Local install')}
+                </p>
               </div>
-              <Icon
-                name="ChevronUpDownIcon"
-                size={14}
-                className="ml-auto text-muted-foreground flex-shrink-0"
-              />
+              {user && (
+                <button
+                  onClick={() => signOut()}
+                  title="Sign out"
+                  className="ml-auto p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
+                >
+                  <Icon name="ArrowRightOnRectangleIcon" size={14} />
+                </button>
+              )}
             </div>
           )}
         </div>

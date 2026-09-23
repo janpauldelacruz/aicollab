@@ -1,11 +1,13 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import AppLogo from '@/components/ui/AppLogo';
 import Icon from '@/components/ui/AppIcon';
 import AgentNetworkViz from './AgentNetworkViz';
+import { useAuth } from '@/contexts/AuthContext';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 type AuthTab = 'login' | 'signup';
 
@@ -23,17 +25,19 @@ interface SignupForm {
   terms: boolean;
 }
 
-const DEMO_ACCOUNTS = [
-  { role: 'Admin', email: 'jamie@aicollab.dev', password: 'collab#2026' },
-  { role: 'Viewer', email: 'observer@aicollab.dev', password: 'watch#2026' },
-];
-
 export default function AuthPageClient() {
+  const { signIn, signUp } = useAuth();
   const [tab, setTab] = useState<AuthTab>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  // Middleware appends ?next= when it bounces an unauthenticated request.
+  const [nextPath, setNextPath] = useState('/sessions-dashboard');
+  useEffect(() => {
+    const target = new URLSearchParams(window.location.search).get('next');
+    if (target && target.startsWith('/')) setNextPath(target);
+  }, []);
 
   const loginForm = useForm<LoginForm>({
     defaultValues: { email: '', password: '', remember: false },
@@ -44,19 +48,18 @@ export default function AuthPageClient() {
 
   const handleLogin = async (data: LoginForm) => {
     setIsLoading(true);
-    // BACKEND INTEGRATION: POST /api/auth/login
-    await new Promise((r) => setTimeout(r, 1200));
-    const valid = DEMO_ACCOUNTS.some((a) => a.email === data.email && a.password === data.password);
-    if (!valid) {
+    try {
+      await signIn(data.email, data.password);
+      toast.success('Welcome back to AICollab!');
+      router.push(nextPath);
+      router.refresh();
+    } catch (err: any) {
       loginForm.setError('email', {
-        message: 'Invalid credentials — use the demo accounts below to sign in',
+        message: err?.message || 'Could not sign in — check your email and password',
       });
+    } finally {
       setIsLoading(false);
-      return;
     }
-    toast.success('Welcome back to AICollab!');
-    router.push('/sessions-dashboard');
-    setIsLoading(false);
   };
 
   const handleSignup = async (data: SignupForm) => {
@@ -66,18 +69,19 @@ export default function AuthPageClient() {
       setIsLoading(false);
       return;
     }
-    // BACKEND INTEGRATION: POST /api/auth/register
-    await new Promise((r) => setTimeout(r, 1200));
-    toast.success('Account created! Welcome to AICollab.');
-    router.push('/sessions-dashboard');
-    setIsLoading(false);
-  };
-
-  const autofillCredentials = (email: string, password: string) => {
-    loginForm.setValue('email', email);
-    loginForm.setValue('password', password);
-    setTab('login');
-    toast.info('Credentials filled — click Sign In to continue');
+    try {
+      await signUp(data.email, data.password, { fullName: data.name });
+      // Supabase may require email confirmation before a session exists.
+      toast.success('Account created — check your email if confirmation is required.');
+      router.push(nextPath);
+      router.refresh();
+    } catch (err: any) {
+      signupForm.setError('email', {
+        message: err?.message || 'Could not create the account',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -171,15 +175,19 @@ export default function AuthPageClient() {
             ))}
           </div>
 
-          {/* This screen is a mock-up. Saying so beats implying the app is protected. */}
-          <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
-            <Icon name="ExclamationTriangleIcon" size={14} className="text-warning mt-0.5" />
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              <span className="text-foreground font-medium">Demo sign-in.</span> AICollab has no
-              account system yet — every page is reachable without signing in, and sessions are
-              stored unprotected in this browser. Do not put anything sensitive here.
-            </p>
-          </div>
+          {/* Only true when there is no auth backend; with Supabase set up the
+              app has real accounts, so showing this would be misleading. */}
+          {!isSupabaseConfigured && (
+            <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+              <Icon name="ExclamationTriangleIcon" size={14} className="text-warning mt-0.5" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                <span className="text-foreground font-medium">No account backend configured.</span>{' '}
+                AICollab is running as a single-user local app — every page is open and sessions
+                stay in this browser. Set the Supabase variables in{' '}
+                <code className="text-foreground">.env</code> to enable accounts.
+              </p>
+            </div>
+          )}
 
           {tab === 'login' ? (
             <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
@@ -433,32 +441,6 @@ export default function AuthPageClient() {
               </button>
             </form>
           )}
-
-          {/* Demo credentials */}
-          <div className="mt-6 p-4 rounded-xl border border-primary/20 bg-primary/5">
-            <p className="text-xs font-medium text-primary mb-3 flex items-center gap-1.5">
-              <Icon name="KeyIcon" size={13} />
-              Demo Credentials
-            </p>
-            <div className="space-y-2">
-              {DEMO_ACCOUNTS.map((acc) => (
-                <div key={`demo-${acc.role}`} className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-14">{acc.role}</span>
-                  <span className="text-xs font-mono text-foreground flex-1 truncate">
-                    {acc.email}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => autofillCredentials(acc.email, acc.password)}
-                    className="text-xs text-primary hover:underline flex-shrink-0 flex items-center gap-1"
-                  >
-                    <Icon name="ArrowRightIcon" size={12} />
-                    Use
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>
