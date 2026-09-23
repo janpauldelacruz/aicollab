@@ -4,7 +4,7 @@ import Icon from '@/components/ui/AppIcon';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
 
-type Tab = 'profile' | 'usage' | 'preferences' | 'export';
+type Tab = 'profile' | 'usage' | 'preferences' | 'export' | 'admin';
 
 interface UsageStats {
   sessionsRun: number;
@@ -53,6 +53,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'usage', label: 'Usage Stats', icon: 'BarChart2Icon' },
   { id: 'preferences', label: 'Model Preferences', icon: 'CpuIcon' },
   { id: 'export', label: 'Export Defaults', icon: 'DownloadIcon' },
+  { id: 'admin', label: 'Admin', icon: 'ShieldCheckIcon' },
 ];
 
 export default function AccountSettingsClient() {
@@ -67,6 +68,14 @@ export default function AccountSettingsClient() {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [plan, setPlan] = useState('Pro');
+
+  // Admin state
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminLoaded, setAdminLoaded] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(false);
+  const [bootstrapResult, setBootstrapResult] = useState<string | null>(null);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   // Usage stats (mock derived from sessions)
   const [usage, setUsage] = useState<UsageStats>({
@@ -97,7 +106,69 @@ export default function AccountSettingsClient() {
     }
     loadUsageStats();
     loadPreferences();
+    checkAdminStatus();
   }, [user]);
+
+  const checkAdminStatus = async () => {
+    try {
+      const res = await fetch('/api/admin/bootstrap');
+      const data = await res.json();
+      setIsAdmin(data.isAdmin ?? false);
+    } catch {}
+    setAdminLoaded(true);
+  };
+
+  const handleBootstrap = async () => {
+    setBootstrapping(true);
+    setBootstrapResult(null);
+    try {
+      const res = await fetch('/api/admin/bootstrap', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setIsAdmin(data.isAdmin);
+        setBootstrapResult(
+          data.isAdmin
+            ? `✅ You (${data.email}) are now the sole admin.`
+            : `ℹ️ Admin assigned to the earliest registered account. You are not the admin.`
+        );
+      } else {
+        setBootstrapResult(`❌ Error: ${data.error}`);
+      }
+    } catch (err: any) {
+      setBootstrapResult(`❌ ${err.message}`);
+    }
+    setBootstrapping(false);
+  };
+
+  const loadAllUsers = async () => {
+    if (!isAdmin) return;
+    setLoadingUsers(true);
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, email, full_name, is_admin, plan, created_at, approval_status')
+        .order('created_at', { ascending: true });
+      if (!error && data) setAllUsers(data);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const toggleUserAdmin = async (userId: string, currentIsAdmin: boolean) => {
+    if (!isAdmin) return;
+    // Only allow removing admin from others, not self
+    if (userId === user?.id && currentIsAdmin) {
+      alert('You cannot remove your own admin status.');
+      return;
+    }
+    await supabase
+      .from('user_profiles')
+      .update({ is_admin: !currentIsAdmin })
+      .eq('id', userId);
+    setAllUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, is_admin: !currentIsAdmin } : u))
+    );
+  };
 
   const loadUsageStats = async () => {
     try {
@@ -218,7 +289,10 @@ export default function AccountSettingsClient() {
               {TABS.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    if (tab.id === 'admin' && isAdmin && allUsers.length === 0) loadAllUsers();
+                  }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     activeTab === tab.id
                       ? 'bg-primary/10 text-primary border border-primary/20' :'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -226,6 +300,9 @@ export default function AccountSettingsClient() {
                 >
                   <Icon name={tab.icon as any} size={16} className="flex-shrink-0" />
                   {tab.label}
+                  {tab.id === 'admin' && isAdmin && (
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
+                  )}
                 </button>
               ))}
 
@@ -258,10 +335,18 @@ export default function AccountSettingsClient() {
                     <div>
                       <p className="text-sm font-medium text-foreground">{displayName}</p>
                       <p className="text-xs text-muted-foreground">{email}</p>
-                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-                        <Icon name="ZapIcon" size={10} />
-                        {plan} Plan
-                      </span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                          <Icon name="ZapIcon" size={10} />
+                          {plan} Plan
+                        </span>
+                        {isAdmin && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-xs font-medium">
+                            <Icon name="ShieldCheckIcon" size={10} />
+                            Admin
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-4">
@@ -506,6 +591,109 @@ export default function AccountSettingsClient() {
                     <p className="text-muted-foreground/50">Format: .{exportDefaults.format}</p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Admin Tab */}
+            {activeTab === 'admin' && (
+              <div className="space-y-5">
+                {/* Admin status */}
+                <div className="bg-card border border-border rounded-xl p-5">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isAdmin ? 'bg-amber-500/15' : 'bg-muted'}`}>
+                      <Icon name="ShieldCheckIcon" size={20} className={isAdmin ? 'text-amber-400' : 'text-muted-foreground'} />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-foreground">Admin Access</h2>
+                      <p className="text-xs text-muted-foreground">
+                        {isAdmin ? 'You are the sole admin of this AICollab instance.' : 'You do not have admin access.'}
+                      </p>
+                    </div>
+                    <span className={`ml-auto px-2.5 py-1 rounded-full text-xs font-semibold ${isAdmin ? 'bg-amber-500/15 text-amber-400' : 'bg-muted text-muted-foreground'}`}>
+                      {isAdmin ? 'Admin' : 'User'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-muted/30 border border-border text-xs text-muted-foreground leading-relaxed mb-4">
+                    <strong className="text-foreground">How admin lock works:</strong> The bootstrap function sets the earliest registered user as the sole admin and demotes all others. Run it once to lock admin to your account.
+                  </div>
+
+                  <button
+                    onClick={handleBootstrap}
+                    disabled={bootstrapping}
+                    className="btn-primary text-sm flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {bootstrapping ? (
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Icon name="ShieldCheckIcon" size={15} />
+                    )}
+                    {bootstrapping ? 'Bootstrapping…' : 'Bootstrap Admin Lock'}
+                  </button>
+
+                  {bootstrapResult && (
+                    <p className="mt-3 text-sm text-foreground bg-muted/30 rounded-lg p-3 border border-border">
+                      {bootstrapResult}
+                    </p>
+                  )}
+                </div>
+
+                {/* User management (admin only) */}
+                {isAdmin && (
+                  <div className="bg-card border border-border rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-sm font-semibold text-foreground">User Management</h2>
+                      <button onClick={loadAllUsers} className="btn-secondary text-xs flex items-center gap-1">
+                        <Icon name="ArrowPathIcon" size={12} />
+                        Refresh
+                      </button>
+                    </div>
+
+                    {loadingUsers ? (
+                      <div className="flex items-center justify-center py-8">
+                        <span className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                      </div>
+                    ) : allUsers.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-6">
+                        No users found. Click Refresh to load.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {allUsers.map((u) => (
+                          <div key={u.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-background border border-border/60">
+                            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-semibold text-primary">
+                                {(u.full_name || u.email || '?')[0].toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-foreground truncate">{u.full_name || '—'}</p>
+                              <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {u.is_admin && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-xs">Admin</span>
+                              )}
+                              {u.id === user?.id && (
+                                <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-xs">You</span>
+                              )}
+                              <button
+                                onClick={() => toggleUserAdmin(u.id, u.is_admin)}
+                                disabled={u.id === user?.id && u.is_admin}
+                                className={`text-xs px-2 py-1 rounded border transition-colors disabled:opacity-40 ${
+                                  u.is_admin
+                                    ? 'border-negative/30 text-negative hover:bg-negative/10' :'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                                }`}
+                              >
+                                {u.is_admin ? 'Revoke' : 'Grant'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </main>

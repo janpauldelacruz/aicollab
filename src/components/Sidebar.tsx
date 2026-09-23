@@ -20,6 +20,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Sessions', href: '/sessions-dashboard', icon: 'LayoutDashboardIcon', group: 'main' },
   { label: 'Live Chatroom', href: '/live-chatroom', icon: 'MessageSquareIcon', group: 'main' },
   { label: 'New Session', href: '/session-setup', icon: 'PlusCircleIcon', group: 'main' },
+  { label: 'Prompt Lab', href: '/prompt-lab', icon: 'BeakerIcon', group: 'main' },
   { label: 'Agent Templates', href: '/agent-templates', icon: 'CpuIcon', group: 'library' },
   { label: 'Session Results', href: '/session-results', icon: 'BarChart2Icon', group: 'library' },
   {
