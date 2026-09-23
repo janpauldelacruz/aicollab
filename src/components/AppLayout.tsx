@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import ResumeSessionBar from './ResumeSessionBar';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -37,6 +38,7 @@ export default function AppLayout({ children, activeRoute }: AppLayoutProps) {
           onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
           sidebarCollapsed={sidebarCollapsed}
         />
+        <ResumeSessionBar activeRoute={activeRoute} />
         <main className="flex-1 overflow-auto">
           <div className="max-w-screen-2xl mx-auto px-4 lg:px-6 xl:px-8 2xl:px-10 py-6">
             {children}
