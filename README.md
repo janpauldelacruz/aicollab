@@ -74,18 +74,41 @@ src/
 └── lib/session/           local persistence, export, live updates
 ```
 
-## Security
+## Running it for other people
 
-The app is built to run on your own machine, and by default:
+AICollab can run two ways.
 
-- Ollama is reached only from the server, bound to `127.0.0.1`
-- `/api/ai/*` is rate limited to 60 requests per minute per client
-- There is **no account system** — every page is reachable without signing in,
-  and sessions are stored unencrypted in the browser
+**Single-user (default).** No Supabase configured: every page is open, sessions
+live in the browser, and agents use your local Ollama. Nothing to set up.
 
-If you make it reachable by anyone else, set `AICOLLAB_ACCESS_TOKEN` in `.env`
-and put it behind a private network or an authenticating proxy. Never commit
-your `.env`.
+**Multi-user.** With Supabase configured the app requires an account, and each
+user brings their own API key for hosted models:
+
+1. Create a Supabase project and run the migrations in `supabase/migrations/`.
+2. Put `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env`.
+3. Generate an encryption key and set `ENCRYPTION_KEY`:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   ```
+   **Back this up.** Losing it makes every stored key unreadable.
+4. Users add their own keys under **API Keys**.
+
+### How credentials are handled
+
+- Keys are encrypted with AES-256-GCM on the server before they are stored.
+  The browser never encrypts, decrypts or holds a key after submission.
+- Stored keys **cannot be read back** — the UI shows only a hint like
+  `sk-pr…4f2a`. Rotate to replace one, as GitHub and Stripe do.
+- Each request uses the caller's own key, so one user's usage is never billed
+  to another. The caller is identified from their session cookie, never from
+  the request body, and row-level security scopes every query.
+- `/api/ai/*` is rate limited to 60 requests per minute per client.
+
+### A word about local models when hosting
+
+Ollama runs on the machine hosting the app, and a consumer GPU serves roughly
+one session at a time. If several people use a hosted instance at once, point
+them at hosted models with their own keys — a shared local GPU will not keep up.
 
 ## 📱 Access from your other devices
 
