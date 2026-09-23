@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Icon from '@/components/ui/AppIcon';
 import { useAuth } from '@/contexts/AuthContext';
-import { createClient } from '@/lib/supabase/client';
 
 interface ApiKey {
   id: string;
@@ -37,32 +36,8 @@ function maskKey(hint: string) {
   return hint || '••••••••••••••••';
 }
 
-/**
- * NOT encryption — base64 only, and trivially reversible by anyone who can read
- * the row. The key's real protection is Supabase row-level security, which
- * limits the row to its owner. Encrypt server-side before treating this as safe
- * for keys you would not paste into a shared document.
- */
-function encodeKey(raw: string): string {
-  return btoa(raw);
-}
-
-function decodeKey(encoded: string): string {
-  try {
-    return atob(encoded);
-  } catch {
-    return '';
-  }
-}
-
-function buildHint(raw: string): string {
-  if (raw.length <= 8) return raw.slice(0, 2) + '••••';
-  return raw.slice(0, 4) + '••••' + raw.slice(-4);
-}
-
 export default function ApiKeysClient() {
   const { user } = useAuth();
-  const supabase = createClient();
 
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,8 +45,6 @@ export default function ApiKeysClient() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [rotateTarget, setRotateTarget] = useState<ApiKey | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ApiKey | null>(null);
-  const [revealedId, setRevealedId] = useState<string | null>(null);
-  const [revealedValue, setRevealedValue] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -88,15 +61,12 @@ export default function ApiKeysClient() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
-        .from('user_api_keys')
-        .select('id, provider, label, key_hint, is_active, last_used_at, rotated_at, created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      const res = await fetch('/api/keys');
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.details || body.error || 'Failed to load API keys');
 
-      if (err) throw err;
       setKeys(
-        (data || []).map((row: any) => ({
+        (body.keys || []).map((row: any) => ({
           id: row.id,
           provider: row.provider,
           label: row.label,
@@ -112,7 +82,7 @@ export default function ApiKeysClient() {
     } finally {
       setLoading(false);
     }
-  }, [user, supabase]);
+  }, [user]);
 
   useEffect(() => {
     fetchKeys();
@@ -136,17 +106,19 @@ export default function ApiKeysClient() {
     setSaving(true);
     setFormError(null);
     try {
-      const encrypted = encodeKey(addForm.rawKey.trim());
-      const hint = buildHint(addForm.rawKey.trim());
-      const { error: err } = await supabase.from('user_api_keys').insert({
-        user_id: user.id,
-        provider: addForm.provider,
-        label: addForm.label.trim(),
-        encrypted_key: encrypted,
-        key_hint: hint,
-        is_active: true,
+      // The raw key goes straight to the server, which encrypts it. It is
+      // never stored or encoded in the browser.
+      const res = await fetch('/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: addForm.provider,
+          label: addForm.label.trim(),
+          rawKey: addForm.rawKey.trim(),
+        }),
       });
-      if (err) throw err;
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.details || body.error || 'Failed to add key');
       setShowAddModal(false);
       setAddForm({ provider: 'OPEN_AI', label: '', rawKey: '' });
       await fetchKeys();
@@ -167,14 +139,13 @@ export default function ApiKeysClient() {
     setSaving(true);
     setFormError(null);
     try {
-      const encrypted = encodeKey(rotateKey.trim());
-      const hint = buildHint(rotateKey.trim());
-      const { error: err } = await supabase
-        .from('user_api_keys')
-        .update({ encrypted_key: encrypted, key_hint: hint, rotated_at: new Date().toISOString() })
-        .eq('id', rotateTarget.id)
-        .eq('user_id', user.id);
-      if (err) throw err;
+      const res = await fetch('/api/keys', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyId: rotateTarget.id, rawKey: rotateKey.trim() }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.details || body.error || 'Failed to rotate key');
       setRotateTarget(null);
       setRotateKey('');
       await fetchKeys();
@@ -189,12 +160,15 @@ export default function ApiKeysClient() {
   const handleToggleActive = async (key: ApiKey) => {
     if (!user) return;
     try {
-      const { error: err } = await supabase
-        .from('user_api_keys')
-        .update({ is_active: !key.isActive })
-        .eq('id', key.id)
-        .eq('user_id', user.id);
-      if (err) throw err;
+      const res = await fetch('/api/keys', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyId: key.id, isActive: !key.isActive }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.details || body.error || 'Failed to update key');
+      }
       await fetchKeys();
       showSuccess(`Key ${key.isActive ? 'disabled' : 'enabled'}`);
     } catch (e: any) {
@@ -206,12 +180,13 @@ export default function ApiKeysClient() {
     if (!user || !deleteTarget) return;
     setSaving(true);
     try {
-      const { error: err } = await supabase
-        .from('user_api_keys')
-        .delete()
-        .eq('id', deleteTarget.id)
-        .eq('user_id', user.id);
-      if (err) throw err;
+      const res = await fetch(`/api/keys?id=${encodeURIComponent(deleteTarget.id)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.details || body.error || 'Failed to delete key');
+      }
       setDeleteTarget(null);
       await fetchKeys();
       showSuccess('API key deleted');
@@ -219,35 +194,6 @@ export default function ApiKeysClient() {
       setError(e?.message || 'Failed to delete key');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleReveal = async (key: ApiKey) => {
-    if (revealedId === key.id) {
-      setRevealedId(null);
-      setRevealedValue('');
-      return;
-    }
-    if (!user) return;
-    try {
-      const { data, error: err } = await supabase
-        .from('user_api_keys')
-        .select('encrypted_key')
-        .eq('id', key.id)
-        .eq('user_id', user.id)
-        .single();
-      if (err) throw err;
-      const decoded = decodeKey(data.encrypted_key);
-      setRevealedId(key.id);
-      setRevealedValue(decoded);
-      // Update last_used_at
-      await supabase
-        .from('user_api_keys')
-        .update({ last_used_at: new Date().toISOString() })
-        .eq('id', key.id)
-        .eq('user_id', user.id);
-    } catch {
-      setRevealedId(null);
     }
   };
 
@@ -345,7 +291,6 @@ export default function ApiKeysClient() {
           <div className="space-y-3">
             {keys.map((key) => {
               const prov = getProvider(key.provider);
-              const isRevealed = revealedId === key.id;
               return (
                 <div
                   key={key.id}
@@ -389,25 +334,14 @@ export default function ApiKeysClient() {
                     </div>
                     <div className="flex items-center gap-3 mt-1">
                       <code className="text-xs font-mono text-muted-foreground">
-                        {isRevealed ? revealedValue : maskKey(key.keyHint)}
+                        {maskKey(key.keyHint)}
                       </code>
-                      <button
-                        onClick={() => handleReveal(key)}
-                        className="text-xs text-primary hover:underline"
+                      <span
+                        className="text-xs text-muted-foreground/60"
+                        title="Keys are encrypted on the server and cannot be read back. Rotate to replace one."
                       >
-                        {isRevealed ? 'Hide' : 'Reveal'}
-                      </button>
-                      {isRevealed && (
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(revealedValue);
-                            showSuccess('Copied to clipboard');
-                          }}
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          Copy
-                        </button>
-                      )}
+                        write-only
+                      </span>
                     </div>
                     <p className="text-xs text-muted-foreground/60 mt-0.5">
                       Added {formatDate(key.createdAt)}

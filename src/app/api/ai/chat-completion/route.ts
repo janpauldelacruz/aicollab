@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { completion } from '@rocketnew/llm-sdk';
 import { OLLAMA_PROVIDER, describeOllamaFailure, ollamaChatCompletion } from '@/lib/ai/ollama';
 import { guardAIRequest } from '@/lib/ai/guard';
+import { getAuthedUser } from '@/lib/supabase/server';
+import { getProviderKey } from '@/lib/supabase/keyVault';
 
+/**
+ * Server-wide keys. These are a self-hosting convenience: on a shared
+ * deployment each user brings their own key instead, so one person's usage is
+ * never billed to somebody else.
+ */
 const API_KEYS: Record<string, string | undefined> = {
   OPEN_AI: process.env.OPENAI_API_KEY,
   ANTHROPIC: process.env.ANTHROPIC_API_KEY,
@@ -143,12 +150,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const apiKey = API_KEYS[provider];
+    // Hosted providers: prefer the caller's own key, and only fall back to a
+    // server-wide key when this is a single-user install that configured one.
+    const user = await getAuthedUser();
+    let apiKey: string | undefined;
+
+    if (user) {
+      apiKey = (await getProviderKey(user.id, provider)) ?? undefined;
+    }
+    if (!apiKey) {
+      apiKey = API_KEYS[provider];
+    }
+
     if (!apiKey) {
       return NextResponse.json(
         {
-          error: `${provider.toUpperCase()} API key is not configured`,
-          details: 'The API key for this provider is missing in environment variables',
+          error: `No ${provider.toUpperCase()} key available`,
+          details: user
+            ? `Add your ${provider.toUpperCase()} key on the API Keys page to use this model, or pick a local Ollama model instead.`
+            : 'Sign in and add your own API key, or pick a local Ollama model, which needs no key.',
         },
         { status: 400 }
       );
