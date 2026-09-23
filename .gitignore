@@ -35,3 +35,9 @@ jest-test-results.json
 
 # Optional: if using TurboRepo or monorepo
 turbo/
+
+# Secrets — never commit real keys
+.env
+.env.local
+.env.*.local
+!.env.example

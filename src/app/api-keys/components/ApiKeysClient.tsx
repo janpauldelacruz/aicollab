@@ -37,13 +37,17 @@ function maskKey(hint: string) {
   return hint || '••••••••••••••••';
 }
 
-function encryptKey(raw: string): string {
-  // Client-side obfuscation before storing — actual encryption is via Supabase RLS + pgcrypto at DB level
-  // We store a base64-encoded version; the DB column is protected by RLS
+/**
+ * NOT encryption — base64 only, and trivially reversible by anyone who can read
+ * the row. The key's real protection is Supabase row-level security, which
+ * limits the row to its owner. Encrypt server-side before treating this as safe
+ * for keys you would not paste into a shared document.
+ */
+function encodeKey(raw: string): string {
   return btoa(raw);
 }
 
-function decryptKey(encoded: string): string {
+function decodeKey(encoded: string): string {
   try {
     return atob(encoded);
   } catch {
@@ -132,7 +136,7 @@ export default function ApiKeysClient() {
     setSaving(true);
     setFormError(null);
     try {
-      const encrypted = encryptKey(addForm.rawKey.trim());
+      const encrypted = encodeKey(addForm.rawKey.trim());
       const hint = buildHint(addForm.rawKey.trim());
       const { error: err } = await supabase.from('user_api_keys').insert({
         user_id: user.id,
@@ -163,7 +167,7 @@ export default function ApiKeysClient() {
     setSaving(true);
     setFormError(null);
     try {
-      const encrypted = encryptKey(rotateKey.trim());
+      const encrypted = encodeKey(rotateKey.trim());
       const hint = buildHint(rotateKey.trim());
       const { error: err } = await supabase
         .from('user_api_keys')
@@ -233,7 +237,7 @@ export default function ApiKeysClient() {
         .eq('user_id', user.id)
         .single();
       if (err) throw err;
-      const decoded = decryptKey(data.encrypted_key);
+      const decoded = decodeKey(data.encrypted_key);
       setRevealedId(key.id);
       setRevealedValue(decoded);
       // Update last_used_at

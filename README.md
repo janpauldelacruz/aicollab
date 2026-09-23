@@ -142,33 +142,36 @@ You can check out the [Next.js GitHub repository](https://github.com/vercel/next
 - Styled with Tailwind CSS
 
 Built with ❤️ on Rocket.new
-## 📱 Access from anywhere (Tailscale)
+## 📱 Access from your other devices
 
-The app serves on all interfaces, so any device on your Tailscale network can
-reach it. Ollama itself stays bound to `127.0.0.1` — only the Next.js server
-talks to it, so your models are never exposed.
+`npm run serve:lan` binds the production server to `0.0.0.0:4028`, so any device
+on your network can reach it. Ollama stays bound to `127.0.0.1` — only the
+Next.js server talks to it, so your models are never exposed to the network.
 
 | From | URL |
 | --- | --- |
-| This machine | http://localhost:4028 |
-| Same WiFi | http://192.168.50.55:4028 |
-| Anywhere (Tailscale) | http://100.90.141.101:4028 |
+| This machine | `http://localhost:4028` |
+| Same network | `http://<your-lan-ip>:4028` |
+| Anywhere | `http://<your-tailscale-host>:4028` (install [Tailscale](https://tailscale.com) on both devices) |
 
-### One-time setup on a new device
+Find your addresses with `ipconfig` (Windows) or `ip addr` (Linux/macOS), and
+`tailscale status` for the Tailscale one.
 
-1. Install Tailscale and sign in with the same account.
-2. Open the Tailscale URL above.
+### Running it persistently
 
-### Running it
+- `npm run serve:lan` — production server on all interfaces
+- `start-aicollab.cmd` — the same thing, for a Windows logon task
 
-- `npm run serve:lan` — production server bound to `0.0.0.0:4028`
-- A scheduled task named **AICollab Server** starts it at logon, so the app is
-  up whenever the PC is on.
+### Before exposing it beyond your own devices
+
+The API route that talks to the models is **unauthenticated by default**, which
+is fine on a private machine and not fine on the open internet. Set
+`AICOLLAB_ACCESS_TOKEN` in `.env` to require a token on `/api/ai/*`, and put the
+app behind a private network (Tailscale) or an authenticating proxy rather than
+forwarding a port.
 
 ### Notes
 
-- Sessions live in each browser's local storage, so history on your phone is
-  separate from this PC. Enable the Supabase sync that ships in `supabase/` if
-  you want one shared history.
-- The PC must be awake for this to work. Check Windows sleep settings if the
-  URL stops responding while you are out.
+- Sessions live in each browser's local storage, so history on one device is
+  separate from another. Configure Supabase (see `supabase/`) for shared history.
+- The host machine must be awake for remote access to work.

@@ -171,6 +171,16 @@ export default function AuthPageClient() {
             ))}
           </div>
 
+          {/* This screen is a mock-up. Saying so beats implying the app is protected. */}
+          <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+            <Icon name="ExclamationTriangleIcon" size={14} className="text-warning mt-0.5" />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <span className="text-foreground font-medium">Demo sign-in.</span> AICollab has no
+              account system yet — every page is reachable without signing in, and sessions are
+              stored unprotected in this browser. Do not put anything sensitive here.
+            </p>
+          </div>
+
           {tab === 'login' ? (
             <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
               <div>

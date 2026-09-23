@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { completion } from '@rocketnew/llm-sdk';
 import { OLLAMA_PROVIDER, describeOllamaFailure, ollamaChatCompletion } from '@/lib/ai/ollama';
+import { guardAIRequest } from '@/lib/ai/guard';
 
 const API_KEYS: Record<string, string | undefined> = {
   OPEN_AI: process.env.OPENAI_API_KEY,
@@ -97,6 +98,9 @@ function streamOllama(upstream: Response): NextResponse {
 }
 
 export async function POST(request: NextRequest) {
+  const rejected = guardAIRequest(request);
+  if (rejected) return rejected.response;
+
   let body: any = {};
 
   try {

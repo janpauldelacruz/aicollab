@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { guardAIRequest } from '@/lib/ai/guard';
 import { describeOllamaFailure, listOllamaModels, getOllamaBaseUrl } from '@/lib/ai/ollama';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +9,10 @@ export const dynamic = 'force-dynamic';
  * Lists the models available for agents to use. Backed by the local Ollama
  * daemon, so the roster reflects whatever the user has actually pulled.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rejected = guardAIRequest(request);
+  if (rejected) return rejected.response;
+
   try {
     const models = await listOllamaModels();
     return NextResponse.json({
