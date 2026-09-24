@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Icon from '@/components/ui/AppIcon';
+import { useOnboarding } from '@/components/OnboardingTour';
 
 interface TopbarProps {
   onMenuToggle: () => void;
@@ -37,6 +38,9 @@ export default function Topbar({ onMenuToggle, onSidebarToggle, sidebarCollapsed
           <Icon name="PlusIcon" size={14} />
           New Session
         </Link>
+
+        {/* Tour button */}
+        <TourButton />
 
         {/* Notifications */}
         <div className="relative">
@@ -78,5 +82,19 @@ export default function Topbar({ onMenuToggle, onSidebarToggle, sidebarCollapsed
         </div>
       </div>
     </header>
+  );
+}
+
+function TourButton() {
+  const { start, isActive } = useOnboarding();
+  if (isActive) return null;
+  return (
+    <button
+      onClick={start}
+      title="Start guided tour"
+      className="btn-ghost p-1.5 hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+    >
+      <Icon name="QuestionMarkCircleIcon" size={18} />
+    </button>
   );
 }

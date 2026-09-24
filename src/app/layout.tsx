@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import '../styles/tailwind.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import Analytics from '@/components/Analytics';
+import { OnboardingProvider } from '@/components/OnboardingTour';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -29,7 +30,9 @@ export default function RootLayout({
       <body className={GeistSans.className}>
         <Analytics />
         <AuthProvider>
-          {children}
+          <OnboardingProvider>
+            {children}
+          </OnboardingProvider>
         </AuthProvider>
         <Toaster
           position="bottom-right"

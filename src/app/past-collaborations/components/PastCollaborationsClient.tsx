@@ -128,6 +128,13 @@ function SessionCard({ session, onShare }: { session: Session; onShare: (id: str
               <Icon name="ChartBarIcon" size={13} />
               View Results
             </Link>
+            <Link
+              href={`/session-replay?id=${session.id}`}
+              className="btn-secondary text-xs gap-1.5 px-3"
+              title="Replay session"
+            >
+              <Icon name="PlayCircleIcon" size={13} />
+            </Link>
             <button
               onClick={() => onShare(session.id)}
               className="btn-secondary text-xs gap-1.5 px-3"

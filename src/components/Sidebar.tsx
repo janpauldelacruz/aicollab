@@ -7,6 +7,7 @@ import { listSessions } from '@/lib/session/sessionStore';
 import { useLiveData } from '@/lib/session/useLiveData';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { OnboardingResumeButton } from '@/components/OnboardingTour';
 
 interface NavItem {
   label: string;
@@ -24,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Playbooks', href: '/playbooks', icon: 'BookOpenIcon', group: 'main' },
   { label: 'Agent Templates', href: '/agent-templates', icon: 'CpuIcon', group: 'library' },
   { label: 'Session Results', href: '/session-results', icon: 'BarChart2Icon', group: 'library' },
+  { label: 'Session Replay', href: '/session-replay', icon: 'PlayCircleIcon', group: 'library' },
   {
     label: 'Past Collaborations',
     href: '/past-collaborations',
@@ -82,10 +84,20 @@ export default function Sidebar({
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = activeRoute === item.href;
+    // Map href to data-onboard attribute
+    const onboardMap: Record<string, string> = {
+      '/session-setup': 'session-setup',
+      '/live-chatroom': 'live-chatroom',
+      '/prompt-lab': 'prompt-lab',
+      '/session-replay': 'session-replay',
+      '/admin-dashboard': 'admin-dashboard',
+    };
+    const onboardAttr = onboardMap[item.href];
     return (
       <Link
         href={item.href}
         onClick={onMobileClose}
+        {...(onboardAttr ? { 'data-onboard': onboardAttr } : {})}
         className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
           isActive
             ? 'bg-primary/10 text-primary border border-primary/20' :'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -170,25 +182,28 @@ export default function Sidebar({
               <span className="text-xs font-semibold text-primary">{initials || 'U'}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg">
-              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-semibold text-primary">{initials || 'U'}</span>
+            <div className="space-y-2">
+              <OnboardingResumeButton />
+              <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg">
+                <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-semibold text-primary">{initials || 'U'}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">{displayName}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {email ?? (isSupabaseConfigured ? 'Signed out' : 'Local install')}
+                  </p>
+                </div>
+                {user && (
+                  <button
+                    onClick={() => signOut()}
+                    title="Sign out"
+                    className="ml-auto p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
+                  >
+                    <Icon name="ArrowRightOnRectangleIcon" size={14} />
+                  </button>
+                )}
               </div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">{displayName}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {email ?? (isSupabaseConfigured ? 'Signed out' : 'Local install')}
-                </p>
-              </div>
-              {user && (
-                <button
-                  onClick={() => signOut()}
-                  title="Sign out"
-                  className="ml-auto p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
-                >
-                  <Icon name="ArrowRightOnRectangleIcon" size={14} />
-                </button>
-              )}
             </div>
           )}
         </div>
