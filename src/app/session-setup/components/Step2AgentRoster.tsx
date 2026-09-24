@@ -7,7 +7,7 @@ import Modal from '@/components/ui/Modal';
 import type { AgentConfig, AgentRole, AgentModel, SessionMode } from './SessionSetupClient';
 import { useAvailableModels, modelBadge, FALLBACK_MODELS } from '@/lib/ai/models';
 import { isRoleDefaultText, roleDefault } from '@/lib/ai/roleDefaults';
-import { distinctModels } from '@/lib/ai/multiAgentChat';
+import { distinctModels, pickSharedModel } from '@/lib/ai/multiAgentChat';
 
 interface Props {
   agents: AgentConfig[];
@@ -141,6 +141,12 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
     error: modelsError,
   } = useAvailableModels();
 
+  // The suggested team and new agents use a model this host actually has, so a
+  // fresh install with a single pulled model does not launch agents that 404.
+  const installedDefault =
+    (!modelsLoading && !modelsError && pickSharedModel(availableModels.map((m) => m.id))) ||
+    DEFAULT_MODEL;
+
   const {
     register,
     handleSubmit,
@@ -166,7 +172,7 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
     reset({
       name: '',
       role: 'coder',
-      model: DEFAULT_MODEL,
+      model: installedDefault,
       personality: preset.personality,
       systemPrompt: preset.systemPrompt,
       creativity: preset.creativity,
@@ -232,7 +238,11 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
 
   const loadSuggested = () => {
     const team = SUGGESTED_TEAMS.find((t) => t.mode === mode) || SUGGESTED_TEAMS[0];
-    const withIds = team.agents.map((a, i) => ({ ...a, id: `agent-suggested-${i}` }));
+    const withIds = team.agents.map((a, i) => ({
+      ...a,
+      model: installedDefault,
+      id: `agent-suggested-${i}`,
+    }));
     onChange(withIds);
     toast.success(`Loaded suggested ${mode} team — ${withIds.length} agents`);
   };

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import React, { useState, useEffect } from 'react';
 import Icon from '@/components/ui/AppIcon';
 import { useAuth } from '@/contexts/AuthContext';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 type Tab = 'profile' | 'usage' | 'preferences' | 'export';
 
@@ -58,7 +58,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 
 export default function AccountSettingsClient() {
   const { user, signOut } = useAuth();
-  const supabase = createClient();
+  const [supabase] = useState(() => (isSupabaseConfigured ? createClient() : null));
 
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [saving, setSaving] = useState(false);
@@ -102,6 +102,7 @@ export default function AccountSettingsClient() {
 
   const loadUsageStats = async () => {
     try {
+      if (!supabase) throw new Error('Supabase not configured');
       const { data: sessions } = await supabase
         .from('collab_sessions')
         .select('id, message_count, artifact_count')
@@ -159,7 +160,7 @@ export default function AccountSettingsClient() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      if (activeTab === 'profile' && user) {
+      if (activeTab === 'profile' && user && supabase) {
         await supabase.auth.updateUser({ data: { full_name: displayName } });
       }
       if (activeTab === 'preferences') {

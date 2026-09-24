@@ -20,21 +20,21 @@ export interface ModelOption {
  */
 export const FALLBACK_MODELS: ModelOption[] = [
   {
-    id: 'qwen2.5:14b',
-    label: 'Qwen2.5 14B',
-    family: 'qwen2',
-    parameterSize: '14.8B',
-    quantization: '',
-    sizeGB: 8.37,
-    vision: false,
-  },
-  {
     id: 'qwen2.5:7b',
     label: 'Qwen2.5 7B',
     family: 'qwen2',
     parameterSize: '7.6B',
     quantization: '',
     sizeGB: 4.36,
+    vision: false,
+  },
+  {
+    id: 'qwen2.5:14b',
+    label: 'Qwen2.5 14B',
+    family: 'qwen2',
+    parameterSize: '14.8B',
+    quantization: '',
+    sizeGB: 8.37,
     vision: false,
   },
   {

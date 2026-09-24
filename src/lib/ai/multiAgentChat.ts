@@ -263,12 +263,17 @@ export const REAL_AI_AGENTS: AIAgent[] = [
  * at a tag the daemon does not have.
  */
 export function resolveAgentModels(available: string[]): AIAgent[] {
-  if (available.length === 0) return REAL_AI_AGENTS;
+  const shared = pickSharedModel(available);
+  if (!shared) return REAL_AI_AGENTS;
 
   // One model for everyone, so it stays resident between turns.
-  const shared =
-    PREFERRED_MODELS.find((candidate) => available.includes(candidate)) ?? available[0];
   return REAL_AI_AGENTS.map((agent) => ({ ...agent, model: shared }));
+}
+
+/** The installed model a whole roster should share, or null when none are installed. */
+export function pickSharedModel(available: string[]): string | null {
+  if (available.length === 0) return null;
+  return PREFERRED_MODELS.find((candidate) => available.includes(candidate)) ?? available[0];
 }
 
 const ROLE_COLORS: Record<string, string> = {
