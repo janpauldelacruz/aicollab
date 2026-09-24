@@ -59,7 +59,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css,md,json}\"",
     "serve": "next start",
     "type-check": "tsc --noEmit",
-    "serve:lan": "next start -H 0.0.0.0 -p 4028"
+    "serve:lan": "next start -H 0.0.0.0 -p 4028",
+    "oneclick": "node scripts/one-click.mjs"
   },
   "dependencies": {
     "@dhiwise/component-tagger": "^1.0.16",
