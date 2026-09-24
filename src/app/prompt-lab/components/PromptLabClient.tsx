@@ -5,6 +5,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { runParallelPromptTests, AVAILABLE_MODELS, type PromptTestAgent, type PromptTestResult, type PromptRunSummary,  } from '@/lib/ai/promptLabRunner';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend,
+} from 'recharts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -652,11 +656,41 @@ function RunSummaryPanel({
 }) {
   const successCount = results.filter((r) => r.success).length;
 
+  // Chart data
+  const barData = results.map((r) => {
+    const agent = agents.find((a) => a.id === r.agentId);
+    return {
+      name: r.agentName,
+      tokens: r.totalTokens,
+      cost: parseFloat(r.estimatedCost.toFixed(4)),
+      duration: parseFloat((r.durationMs / 1000).toFixed(2)),
+      color: agent?.color ?? '#6366f1',
+    };
+  });
+
+  const radarData = results
+    .filter((r) => r.success)
+    .map((r) => {
+      const maxTokens = Math.max(...results.map((x) => x.totalTokens), 1);
+      const maxDuration = Math.max(...results.map((x) => x.durationMs), 1);
+      const maxCost = Math.max(...results.map((x) => x.estimatedCost), 0.0001);
+      return {
+        agent: r.agentName,
+        'Token Efficiency': Math.round((1 - r.totalTokens / maxTokens) * 100),
+        'Speed': Math.round((1 - r.durationMs / maxDuration) * 100),
+        'Cost Efficiency': Math.round((1 - r.estimatedCost / maxCost) * 100),
+        'Output Length': Math.min(100, Math.round((r.content?.length ?? 0) / 20)),
+        'Success': r.success ? 100 : 0,
+      };
+    });
+
+  const [chartTab, setChartTab] = React.useState<'tokens' | 'cost' | 'speed' | 'radar'>('tokens');
+
   return (
     <div className="card-base space-y-4">
       <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
         <Icon name="ChartBarIcon" size={16} className="text-primary" />
-        Run Summary
+        Run Summary & Comparison
       </h3>
 
       {/* KPIs */}
@@ -677,6 +711,91 @@ function RunSummaryPanel({
         ))}
       </div>
 
+      {/* Chart tabs */}
+      <div className="flex gap-1 border-b border-border">
+        {([
+          { id: 'tokens', label: 'Token Usage' },
+          { id: 'cost', label: 'Cost / Model' },
+          { id: 'speed', label: 'Speed' },
+          { id: 'radar', label: 'Quality Radar' },
+        ] as const).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setChartTab(t.id)}
+            className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors -mb-px ${
+              chartTab === t.id
+                ? 'border-primary text-primary' :'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Charts */}
+      {(chartTab === 'tokens' || chartTab === 'cost' || chartTab === 'speed') && (
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart
+            data={barData}
+            margin={{ top: 4, right: 4, bottom: 4, left: -10 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} />
+            <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} />
+            <Tooltip
+              contentStyle={{
+                background: 'var(--card)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+              labelStyle={{ color: 'var(--foreground)' }}
+            />
+            <Bar
+              dataKey={chartTab === 'tokens' ? 'tokens' : chartTab === 'cost' ? 'cost' : 'duration'}
+              radius={[4, 4, 0, 0]}
+              fill="var(--primary)"
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+
+      {chartTab === 'radar' && radarData.length > 0 && (
+        <ResponsiveContainer width="100%" height={240}>
+          <RadarChart data={[
+            { metric: 'Token Efficiency', ...Object.fromEntries(radarData.map((r) => [r.agent, r['Token Efficiency']])) },
+            { metric: 'Speed', ...Object.fromEntries(radarData.map((r) => [r.agent, r['Speed']])) },
+            { metric: 'Cost Efficiency', ...Object.fromEntries(radarData.map((r) => [r.agent, r['Cost Efficiency']])) },
+            { metric: 'Output Length', ...Object.fromEntries(radarData.map((r) => [r.agent, r['Output Length']])) },
+            { metric: 'Success', ...Object.fromEntries(radarData.map((r) => [r.agent, r['Success']])) },
+          ]}>
+            <PolarGrid stroke="var(--border)" />
+            <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
+            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }} />
+            {radarData.map((r, i) => {
+              const agent = agents.find((a) => a.name === r.agent);
+              return (
+                <Radar
+                  key={r.agent}
+                  name={r.agent}
+                  dataKey={r.agent}
+                  stroke={agent?.color ?? '#6366f1'}
+                  fill={agent?.color ?? '#6366f1'}
+                  fillOpacity={0.15}
+                />
+              );
+            })}
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+          </RadarChart>
+        </ResponsiveContainer>
+      )}
+
+      {chartTab === 'radar' && radarData.length === 0 && (
+        <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+          No successful results to compare
+        </div>
+      )}
+
       {/* Per-agent breakdown */}
       <div className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -684,6 +803,8 @@ function RunSummaryPanel({
         </p>
         {results.map((r) => {
           const agent = agents.find((a) => a.id === r.agentId);
+          const totalCost = summary.totalCost || 0.0001;
+          const contribution = Math.round((r.estimatedCost / totalCost) * 100);
           return (
             <div key={r.agentId} className="flex items-center gap-3 text-xs">
               <div
@@ -700,6 +821,9 @@ function RunSummaryPanel({
               </span>
               <span className="text-muted-foreground tabular-nums w-12">
                 {(r.durationMs / 1000).toFixed(1)}s
+              </span>
+              <span className="text-muted-foreground tabular-nums w-10">
+                {contribution}%
               </span>
               {r.success ? (
                 <Icon name="CheckCircleIcon" size={12} className="text-positive" />

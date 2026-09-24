@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Live Chatroom', href: '/live-chatroom', icon: 'MessageSquareIcon', group: 'main' },
   { label: 'New Session', href: '/session-setup', icon: 'PlusCircleIcon', group: 'main' },
   { label: 'Prompt Lab', href: '/prompt-lab', icon: 'BeakerIcon', group: 'main' },
+  { label: 'Playbooks', href: '/playbooks', icon: 'BookOpenIcon', group: 'main' },
   { label: 'Agent Templates', href: '/agent-templates', icon: 'CpuIcon', group: 'library' },
   { label: 'Session Results', href: '/session-results', icon: 'BarChart2Icon', group: 'library' },
   {
@@ -31,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   { label: 'Share Session', href: '/share-session', icon: 'ShareIcon', group: 'library' },
   { label: 'API Keys', href: '/api-keys', icon: 'KeyIcon', group: 'account' },
+  { label: 'Admin Dashboard', href: '/admin-dashboard', icon: 'ShieldCheckIcon', group: 'account' },
   { label: 'Account Settings', href: '/account-settings', icon: 'SettingsIcon', group: 'account' },
 ];
 

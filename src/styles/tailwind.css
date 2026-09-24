@@ -3,27 +3,27 @@
 @tailwind utilities;
 
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
+  --background: #07070a;
+  --foreground: #f4f4f6;
   --primary: #7c3aed;
   --primary-foreground: #ffffff;
-  --secondary: #18181b;
+  --secondary: #141418;
   --secondary-foreground: #a1a1aa;
   --accent: #06b6d4;
   --accent-foreground: #ffffff;
-  --muted: #27272a;
+  --muted: #1e1e24;
   --muted-foreground: #71717a;
-  --card: #111113;
-  --card-foreground: #fafafa;
-  --border: #27272a;
-  --input: #1c1c1f;
+  --card: #0f0f14;
+  --card-foreground: #f4f4f6;
+  --border: #1f1f28;
+  --input: #16161c;
   --ring: #7c3aed;
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --font-sans: var(--font-geist-sans), sans-serif;
   --font-mono: var(--font-geist-mono), monospace;
 
-  --violet-glow: rgba(124, 58, 237, 0.15);
-  --cyan-glow: rgba(6, 182, 212, 0.15);
+  --violet-glow: rgba(124, 58, 237, 0.18);
+  --cyan-glow: rgba(6, 182, 212, 0.18);
   --positive: #22c55e;
   --negative: #ef4444;
   --warning: #f59e0b;
@@ -49,15 +49,15 @@
     margin: 0;
   }
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
-    background: var(--background);
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--muted);
-    border-radius: 3px;
+    background: var(--border);
+    border-radius: 10px;
   }
   ::-webkit-scrollbar-thumb:hover {
     background: var(--muted-foreground);
@@ -72,25 +72,37 @@
     font-variant-numeric: tabular-nums;
   }
   .glow-primary {
-    box-shadow: 0 0 20px var(--violet-glow), 0 0 40px var(--violet-glow);
+    box-shadow: 0 0 24px var(--violet-glow), 0 0 48px var(--violet-glow);
   }
   .glow-accent {
-    box-shadow: 0 0 20px var(--cyan-glow), 0 0 40px var(--cyan-glow);
+    box-shadow: 0 0 24px var(--cyan-glow), 0 0 48px var(--cyan-glow);
   }
   .gradient-primary {
-    background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 50%, #a78bfa 100%);
+    background: linear-gradient(135deg, #4c1d95 0%, #7c3aed 50%, #a78bfa 100%);
   }
   .gradient-card {
-    background: linear-gradient(135deg, #111113 0%, #18181b 100%);
+    background: linear-gradient(135deg, #0f0f14 0%, #141418 100%);
   }
   .gradient-auth-left {
-    background: linear-gradient(135deg, #09090b 0%, #0f0f14 50%, #13101e 100%);
+    background: linear-gradient(135deg, #07070a 0%, #0d0b18 40%, #110e1f 70%, #0d1117 100%);
   }
   .text-gradient-primary {
     background: linear-gradient(135deg, #a78bfa, #06b6d4);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+  .text-gradient-warm {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .glass-card {
+    background: rgba(15, 15, 20, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.06);
   }
   .agent-pulse {
     animation: agent-pulse 2s ease-in-out infinite;
@@ -105,14 +117,14 @@
     animation-delay: 0.4s;
   }
   .message-enter {
-    animation: message-slide-in 0.3s ease-out forwards;
+    animation: message-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
   .session-card-hover {
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .session-card-hover:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 32px rgba(124, 58, 237, 0.12);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(124, 58, 237, 0.14);
   }
   .live-indicator {
     animation: live-pulse 1.5s ease-in-out infinite;
@@ -127,13 +139,13 @@
     animation: node-float 8s ease-in-out infinite 1s;
   }
   .sidebar-transition {
-    transition: width 300ms ease, opacity 200ms ease;
+    transition: width 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease;
   }
   .artifact-appear {
-    animation: artifact-slide 0.35s ease-out forwards;
+    animation: artifact-slide 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
   .shimmer {
-    background: linear-gradient(90deg, var(--muted) 25%, #3f3f46 50%, var(--muted) 75%);
+    background: linear-gradient(90deg, var(--muted) 25%, #2a2a35 50%, var(--muted) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
   }
@@ -145,26 +157,48 @@
     height: 2px;
     background: var(--muted);
   }
+  .premium-border {
+    border: 1px solid transparent;
+    background-clip: padding-box;
+    position: relative;
+  }
+  .premium-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(124,58,237,0.3), rgba(6,182,212,0.15), transparent);
+    z-index: -1;
+  }
+  .fade-in-up {
+    animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-primary-foreground text-sm font-medium transition-all duration-200 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    background: linear-gradient(135deg, #5b21b6, #7c3aed);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 0 0 1px rgba(124,58,237,0.2);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 4px 16px rgba(124,58,237,0.3), 0 0 0 1px rgba(124,58,237,0.3);
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-secondary text-foreground text-sm font-medium border border-border transition-all duration-150 hover:bg-muted active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-secondary text-foreground text-sm font-medium border border-border transition-all duration-200 hover:bg-muted hover:border-border active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-muted-foreground text-sm font-medium transition-all duration-150 hover:bg-muted hover:text-foreground active:scale-95;
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-muted-foreground text-sm font-medium transition-all duration-200 hover:bg-muted hover:text-foreground active:scale-95;
   }
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-sm font-medium transition-all duration-150 hover:bg-red-500/20 active:scale-95;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-sm font-medium transition-all duration-200 hover:bg-red-500/20 active:scale-95;
   }
   .card-base {
     @apply rounded-xl border border-border bg-card p-4;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   }
-  .input-base {
-    @apply w-full px-3 py-2 rounded-lg bg-input border border-border text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-150;
+.input-base  {
+    @apply w-full px-3 py-2 rounded-lg bg-input border border-border text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all duration-150;
   }
   .badge-role-brainstormer {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20;
@@ -224,7 +258,7 @@
 }
 
 @keyframes message-slide-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -247,4 +281,9 @@
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
