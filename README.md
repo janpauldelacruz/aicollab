@@ -30,6 +30,20 @@ use. AICollab is built around three constraints that stop that:
 No API keys are needed. Hosted models (OpenAI, Anthropic, Gemini, Perplexity)
 are optional and off by default.
 
+## One-click start (Windows)
+
+Double-click **`AICollab.cmd`**. It installs whatever is missing (Node.js and
+Ollama via `winget`, the `qwen2.5:7b` model, npm packages), creates `.env`,
+builds, starts the app on `http://localhost:4028` and opens your browser.
+
+The first run downloads about 5 GB and takes a while. Later runs skip every step
+that is already done and open in seconds; if the app is already running,
+double-clicking just reopens the tab. Keep the window open while you use it.
+
+For a desktop icon: right-click `AICollab.cmd` → **Send to → Desktop (create
+shortcut)**. On macOS/Linux, install Node.js and Ollama, then run
+`npm run oneclick`.
+
 ## Quick start
 
 ```bash

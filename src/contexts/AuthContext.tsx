@@ -17,11 +17,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<any>(null);
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  // createBrowserClient throws without credentials, which crashes every page
+  // (and the production build) on a local install that has no Supabase.
+  const [supabase] = useState(() => (isSupabaseConfigured ? createClient() : null));
 
   useEffect(() => {
     // Without real credentials every call 400s; the app runs fine signed out.
-    if (!isSupabaseConfigured) {
+    if (!supabase) {
       setLoading(false);
       return;
     }
@@ -45,13 +47,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const requireClient = () => {
+    if (!supabase) {
+      throw new Error('Accounts are disabled: Supabase is not configured in .env.');
+    }
+    return supabase;
+  };
+
   // Email/Password Sign Up
   const signUp = async (
     email: string,
     password: string,
     metadata: { fullName?: string; avatarUrl?: string } = {}
   ) => {
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await requireClient().auth.signUp({
       email,
       password,
       options: {
@@ -68,7 +77,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Email/Password Sign In
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await requireClient().auth.signInWithPassword({
       email,
       password,
     });
@@ -78,7 +87,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Sign Out
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await requireClient().auth.signOut();
     if (!error && typeof window !== 'undefined') {
       window.location.href = '/sign-up-login';
     }
@@ -90,7 +99,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const {
       data: { user },
       error,
-    } = await supabase.auth.getUser();
+    } = await requireClient().auth.getUser();
     if (error) throw error;
     return user;
   };
@@ -103,7 +112,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Get User Profile from Database
   const getUserProfile = async () => {
     if (!user) return null;
-    const { data, error } = await supabase
+    const { data, error } = await requireClient()
       .from('user_profiles')
       .select('*')
       .eq('id', user.id)
