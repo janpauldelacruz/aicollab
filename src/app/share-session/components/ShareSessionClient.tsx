@@ -41,6 +41,25 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+const PERMISSION_OPTIONS = [
+  {
+    value: 'live_progress',
+    label: 'Live Progress',
+    desc: 'Viewer sees messages as they arrive in real-time',
+    icon: 'SignalIcon',
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10 border-blue-500/20',
+  },
+  {
+    value: 'final_results',
+    label: 'Final Results Only',
+    desc: 'Viewer only sees the completed session transcript and artifacts',
+    icon: 'DocumentCheckIcon',
+    color: 'text-green-400',
+    bg: 'bg-green-500/10 border-green-500/20',
+  },
+];
+
 export default function ShareSessionClient({ sessionId }: ShareSessionClientProps) {
   const { user } = useAuth();
   const [session, setSession] = useState<DBSession | null>(null);
@@ -48,7 +67,8 @@ export default function ShareSessionClient({ sessionId }: ShareSessionClientProp
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [label, setLabel] = useState('');
-  const [allowRerun, setAllowRerun] = useState(true);
+  const [allowRerun, setAllowRerun] = useState(false);
+  const [permissionLevel, setPermissionLevel] = useState<'live_progress' | 'final_results'>('final_results');
   const [expiresInDays, setExpiresInDays] = useState<number | ''>('');
 
   useEffect(() => {
@@ -73,11 +93,13 @@ export default function ShareSessionClient({ sessionId }: ShareSessionClientProp
       const link = await createShareLink(sessionId, user.id, {
         label: label.trim() || 'Shared Link',
         allowRerun,
+        permissionLevel,
         expiresInDays: expiresInDays ? Number(expiresInDays) : undefined,
       });
       if (link) {
         setLinks((prev) => [link, ...prev]);
         setLabel('');
+        setExpiresInDays('');
         toast.success('Share link created!');
       } else {
         toast.error('Failed to create share link');
@@ -133,34 +155,39 @@ export default function ShareSessionClient({ sessionId }: ShareSessionClientProp
         </div>
       </div>
 
-      {/* What gets shared */}
-      <div className="card-base p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-          <Icon name="InformationCircleIcon" size={16} className="text-accent" />
-          What recipients can access
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { icon: 'ChatBubbleLeftRightIcon', label: 'Full Transcript', desc: 'All agent messages in order' },
-            { icon: 'DocumentDuplicateIcon', label: 'Artifacts', desc: 'Code, docs, and decisions' },
-            { icon: 'ArrowPathIcon', label: 'Re-run Option', desc: 'Launch with same agent roster' },
-          ].map((item) => (
-            <div key={item.label} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-border">
-              <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
-                <Icon name={item.icon as any} size={16} className="text-accent" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-foreground">{item.label}</p>
-                <p className="text-xs text-muted-foreground">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Create new link */}
-      <div className="card-base p-5 space-y-4">
+      <div className="card-base p-5 space-y-5">
         <h2 className="text-sm font-semibold text-foreground">Create New Share Link</h2>
+
+        {/* Permission level selector */}
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-2 block">Viewer Permission</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {PERMISSION_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPermissionLevel(opt.value as any)}
+                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                  permissionLevel === opt.value
+                    ? `${opt.bg} border-current`
+                    : 'bg-muted/20 border-border hover:border-border/80'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${permissionLevel === opt.value ? opt.bg : 'bg-muted/40'}`}>
+                  <Icon name={opt.icon as any} size={15} className={permissionLevel === opt.value ? opt.color : 'text-muted-foreground'} />
+                </div>
+                <div>
+                  <p className={`text-xs font-semibold ${permissionLevel === opt.value ? opt.color : 'text-foreground'}`}>{opt.label}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">{opt.desc}</p>
+                </div>
+                {permissionLevel === opt.value && (
+                  <Icon name="CheckCircleIcon" size={15} className={`${opt.color} ml-auto flex-shrink-0 mt-0.5`} />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="space-y-3">
           <div>
@@ -241,6 +268,7 @@ export default function ShareSessionClient({ sessionId }: ShareSessionClientProp
             {links.map((link) => {
               const shareUrl = `${SITE_URL}/shared/${link.token}`;
               const isExpired = link.expires_at ? new Date(link.expires_at) < new Date() : false;
+              const permOpt = PERMISSION_OPTIONS.find((p) => p.value === (link as any).permission_level) || PERMISSION_OPTIONS[1];
               return (
                 <div key={link.id} className={`card-base p-4 ${isExpired ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between gap-3 mb-2">
@@ -250,6 +278,9 @@ export default function ShareSessionClient({ sessionId }: ShareSessionClientProp
                         {isExpired && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-medium">Expired</span>
                         )}
+                        <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${permOpt.bg} ${permOpt.color}`}>
+                          {permOpt.label}
+                        </span>
                         {link.allow_rerun && !isExpired && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">Re-run enabled</span>
                         )}

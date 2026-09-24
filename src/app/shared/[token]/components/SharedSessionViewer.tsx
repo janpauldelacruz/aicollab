@@ -15,7 +15,7 @@ interface SharedData {
   agents: any[];
   messages: DBMessage[];
   artifacts: DBArtifact[];
-  shareLink: DBShareLink;
+  shareLink: DBShareLink & { permission_level?: string };
 }
 
 const AGENT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4'];
@@ -36,7 +36,13 @@ export default function SharedSessionViewer({ token }: SharedSessionViewerProps)
       if (!result) {
         setError('This share link is invalid or has expired.');
       } else {
-        setData(result);
+        // If final_results only and session is still running, show restricted message
+        const permLevel = (result.shareLink as any).permission_level || 'final_results';
+        if (permLevel === 'final_results' && result.session.session_status === 'running') {
+          setError('This link only shows final results. The session is still in progress — check back when it completes.');
+        } else {
+          setData(result as SharedData);
+        }
       }
       setLoading(false);
     });
@@ -69,6 +75,8 @@ export default function SharedSessionViewer({ token }: SharedSessionViewerProps)
   }
 
   const { session, agents, messages, artifacts, shareLink } = data;
+  const permLevel = (shareLink as any).permission_level || 'final_results';
+  const isLiveProgress = permLevel === 'live_progress';
 
   return (
     <div className="min-h-screen bg-background">
@@ -82,6 +90,11 @@ export default function SharedSessionViewer({ token }: SharedSessionViewerProps)
         </div>
         <div className="w-px h-5 bg-border" />
         <span className="text-sm text-muted-foreground truncate hidden sm:block">{session.name}</span>
+        {/* Permission badge */}
+        <span className={`hidden sm:flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${isLiveProgress ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'}`}>
+          <Icon name={isLiveProgress ? 'SignalIcon' : 'DocumentCheckIcon'} size={11} />
+          {isLiveProgress ? 'Live Progress' : 'Final Results'}
+        </span>
         <div className="ml-auto flex items-center gap-2">
           {shareLink.allow_rerun && (
             <Link href="/session-setup" className="btn-primary text-xs gap-1.5 py-1.5">
@@ -156,7 +169,7 @@ export default function SharedSessionViewer({ token }: SharedSessionViewerProps)
               onClick={() => setActiveTab(tab.id as any)}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all duration-150 ${
                 activeTab === tab.id
-                  ? 'border-primary text-primary' :'border-transparent text-muted-foreground hover:text-foreground'
+                  ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               <Icon name={tab.icon as any} size={15} />

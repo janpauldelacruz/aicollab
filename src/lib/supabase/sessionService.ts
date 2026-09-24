@@ -245,7 +245,7 @@ function generateToken(): string {
 export async function createShareLink(
   sessionId: string,
   userId: string,
-  options: { label?: string; allowRerun?: boolean; expiresInDays?: number } = {}
+  options: { label?: string; allowRerun?: boolean; permissionLevel?: 'live_progress' | 'final_results'; expiresInDays?: number } = {}
 ): Promise<DBShareLink | null> {
   const supabase = createClient();
   const token = generateToken();
@@ -260,7 +260,8 @@ export async function createShareLink(
       created_by: userId,
       token,
       label: options.label || 'Shared Link',
-      allow_rerun: options.allowRerun ?? true,
+      allow_rerun: options.allowRerun ?? false,
+      permission_level: options.permissionLevel ?? 'final_results',
       expires_at: expiresAt,
     })
     .select()

@@ -54,13 +54,22 @@ export default function AuthPageClient() {
     setOauthLoading(provider);
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOAuth({
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+      const redirectTo = `${siteUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+          redirectTo,
+          queryParams: provider === 'google' ? { access_type: 'offline', prompt: 'consent' } : undefined,
         },
       });
       if (error) throw error;
+      // If no URL returned, the redirect didn't happen
+      if (!data?.url) {
+        throw new Error(`OAuth provider ${provider} did not return a redirect URL. Ensure it is enabled in your Supabase dashboard under Authentication > Providers.`);
+      }
+      // Redirect to OAuth provider
+      window.location.href = data.url;
     } catch (err: any) {
       toast.error(err?.message || `Failed to sign in with ${provider}`);
       setOauthLoading(null);
