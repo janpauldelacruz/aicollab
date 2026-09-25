@@ -144,27 +144,59 @@ export function workspaceFiles(workspace: Workspace): WorkspaceFile[] {
   return Object.values(workspace).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Orders both the chatroom's elapsed "MM:SS" stamps and ISO dates numerically. */
+function timestampValue(stamp: string): number {
+  const elapsed = /^(\d+):(\d{2})$/.exec(stamp);
+  if (elapsed) return Number(elapsed[1]) * 60 + Number(elapsed[2]);
+  const parsed = Date.parse(stamp);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 /**
  * The workspace as the agents see it in their prompt. Long files are trimmed to
- * their head and tail so a 14B model does not lose the instructions.
+ * their head and tail so a 14B model does not lose the instructions, and once
+ * the total budget is spent the remaining files are listed by name only — the
+ * prompt has to fit the model's context window however many files exist.
+ * Most recently edited files are shown first.
  */
-export function renderWorkspaceForPrompt(workspace: Workspace, maxCharsPerFile = 1200): string {
+export function renderWorkspaceForPrompt(
+  workspace: Workspace,
+  maxCharsPerFile = 1200,
+  maxTotalChars = 6000
+): string {
   const files = workspaceFiles(workspace);
   if (files.length === 0) {
     return 'The shared workspace is empty. Create the first file this turn.';
   }
 
-  return files
-    .map((file) => {
-      let body = file.content;
-      if (body.length > maxCharsPerFile) {
-        const head = body.slice(0, Math.floor(maxCharsPerFile * 0.6));
-        const tail = body.slice(-Math.floor(maxCharsPerFile * 0.3));
-        body = `${head}\n… (${file.content.length - head.length - tail.length} chars trimmed) …\n${tail}`;
-      }
-      return `FILE: ${file.name} (rev ${file.revision}, last edited by ${file.updatedBy})\n\`\`\`${file.language}\n${body}\n\`\`\``;
-    })
-    .join('\n\n');
+  const byRecency = [...files].sort(
+    (a, b) => timestampValue(b.updatedAt) - timestampValue(a.updatedAt)
+  );
+  const shown: string[] = [];
+  const listed: string[] = [];
+  let used = 0;
+
+  for (const file of byRecency) {
+    let body = file.content;
+    if (body.length > maxCharsPerFile) {
+      const head = body.slice(0, Math.floor(maxCharsPerFile * 0.6));
+      const tail = body.slice(-Math.floor(maxCharsPerFile * 0.3));
+      body = `${head}\n… (${file.content.length - head.length - tail.length} chars trimmed) …\n${tail}`;
+    }
+    const block = `FILE: ${file.name} (rev ${file.revision}, last edited by ${file.updatedBy})\n\`\`\`${file.language}\n${body}\n\`\`\``;
+
+    if (shown.length > 0 && used + block.length > maxTotalChars) {
+      listed.push(`${file.name} (rev ${file.revision})`);
+      continue;
+    }
+    shown.push(block);
+    used += block.length;
+  }
+
+  if (listed.length > 0) {
+    shown.push(`Also in the workspace (contents omitted to save space): ${listed.join(', ')}`);
+  }
+  return shown.join('\n\n');
 }
 
 /** Plain-text bundle of the whole workspace, for export. */

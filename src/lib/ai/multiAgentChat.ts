@@ -647,7 +647,7 @@ Use only what the workspace actually establishes. If something was never resolve
     },
     {
       role: 'user',
-      content: `Goal: "${topic}"\n\nThe workspace the session produced:\n\n${renderWorkspaceForPrompt(workspace, 3000)}\n\nWrite ${DELIVERABLE_FILE} now.`,
+      content: `Goal: "${topic}"\n\nThe workspace the session produced:\n\n${renderWorkspaceForPrompt(workspace, 3000, 16000)}\n\nWrite ${DELIVERABLE_FILE} now.`,
     },
   ];
 

@@ -78,6 +78,15 @@ a time, so a mixed roster makes Ollama unload and reload gigabytes between turns
 — usually slower than the generation itself. The app warns you when a roster
 spans more than one model.
 
+### Memory and context
+
+Every request asks Ollama for an 8K-token context (`OLLAMA_NUM_CTX` in `.env`)
+and keeps the model loaded for 30 minutes between turns (`OLLAMA_KEEP_ALIVE`).
+Prompts that would not fit are trimmed on purpose — oldest turns first, the
+agent's instructions never — instead of being cut silently by Ollama. On a GPU
+with less than 8 GB of memory set `OLLAMA_NUM_CTX=4096`; a larger context costs
+memory on top of the model itself.
+
 ## Project layout
 
 ```

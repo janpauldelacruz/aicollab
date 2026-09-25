@@ -13,6 +13,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { connect } from 'node:net';
 import { copyFileSync, existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,12 +66,17 @@ async function ollamaModels() {
   return (data.models || []).map((m) => m.name);
 }
 
-function findOllamaBinary() {
+/**
+ * How to start Ollama here. On Windows prefer the tray app: it runs the server
+ * the same way the installer does and keeps running after this window closes.
+ */
+function ollamaStartCommand() {
   if (IS_WINDOWS && process.env.LOCALAPPDATA) {
-    const installed = join(process.env.LOCALAPPDATA, 'Programs', 'Ollama', 'ollama.exe');
-    if (existsSync(installed)) return installed;
+    const dir = join(process.env.LOCALAPPDATA, 'Programs', 'Ollama');
+    if (existsSync(join(dir, 'ollama app.exe'))) return [join(dir, 'ollama app.exe'), []];
+    if (existsSync(join(dir, 'ollama.exe'))) return [join(dir, 'ollama.exe'), ['serve']];
   }
-  return 'ollama';
+  return ['ollama', ['serve']];
 }
 
 async function ensureOllama() {
@@ -78,15 +84,12 @@ async function ensureOllama() {
   try {
     return await ollamaModels();
   } catch {
-    info('Not running, starting "ollama serve"...');
+    info('Not running, starting it...');
   }
 
   try {
-    const child = spawn(findOllamaBinary(), ['serve'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
+    const [command, args] = ollamaStartCommand();
+    const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true });
     child.on('error', () => {});
     child.unref();
   } catch {
@@ -256,6 +259,23 @@ async function appIsUp() {
   }
 }
 
+/** True when something (not necessarily AICollab) is listening on the port. */
+function portTaken(port) {
+  return new Promise((resolvePromise) => {
+    const socket = connect({ port, host: '127.0.0.1' });
+    socket.setTimeout(1000);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolvePromise(true);
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolvePromise(false);
+    });
+    socket.once('error', () => resolvePromise(false));
+  });
+}
+
 function openBrowser(url) {
   // rundll32 avoids cmd.exe quoting rules for `start`.
   const [command, args] = IS_WINDOWS
@@ -308,6 +328,14 @@ try {
     step(`AICollab is already running at ${APP_URL}`);
     openBrowser(`${APP_URL}/live-chatroom`);
     process.exit(0);
+  }
+
+  // Fail now, not after a long install and build, if another app holds the port.
+  if (await portTaken(PORT)) {
+    fail(
+      `Port ${PORT} is already used by another program (not AICollab). Close it, or run ` +
+        `with a different port, e.g. in a terminal: set PORT=4030 && AICollab.cmd`
+    );
   }
 
   const models = await ensureOllama();

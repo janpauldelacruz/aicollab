@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { completion } from '@rocketnew/llm-sdk';
-import { OLLAMA_PROVIDER, describeOllamaFailure, ollamaChatCompletion } from '@/lib/ai/ollama';
+import {
+  OLLAMA_PROVIDER,
+  describeOllamaFailure,
+  ollamaChatCompletion,
+  ollamaChatStream,
+  type OllamaChatArgs,
+} from '@/lib/ai/ollama';
 import { guardAIRequest } from '@/lib/ai/guard';
 import { getAuthedUser } from '@/lib/supabase/server';
 import { getProviderKey } from '@/lib/supabase/keyVault';
@@ -35,63 +41,36 @@ function sse(payload: object): Uint8Array {
 }
 
 /**
- * Streams Ollama's OpenAI-compatible SSE output using the same envelope the
- * hosted providers use: {type:'start'} → {type:'chunk', chunk} → {type:'done'}.
+ * Streams an Ollama completion using the same envelope the hosted providers use:
+ * {type:'start'} → {type:'chunk', chunk} → {type:'done'}, where each chunk is an
+ * OpenAI-style delta.
  */
-function streamOllama(upstream: Response): NextResponse {
+async function streamOllama(args: OllamaChatArgs): Promise<NextResponse> {
+  // Pull the first chunk before committing to a stream, so a missing model or a
+  // stopped daemon comes back as a normal JSON error with the right status.
+  const iterator = ollamaChatStream(args);
+  const first = await iterator.next();
+
   const readable = new ReadableStream({
     async start(controller) {
-      const reader = upstream.body?.getReader();
-
-      if (!reader) {
+      const send = (content: string) => {
+        if (!content) return;
         controller.enqueue(
-          sse({
-            type: 'error',
-            error: 'OLLAMA API error: 500',
-            details: 'Response body is not readable',
-          })
+          sse({ type: 'chunk', chunk: { choices: [{ index: 0, delta: { content } }] } })
         );
-        controller.close();
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
+      };
 
       try {
         controller.enqueue(sse({ type: 'start' }));
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith('data:')) continue;
-
-            const payload = trimmed.slice(5).trim();
-            if (!payload || payload === '[DONE]') continue;
-
-            try {
-              controller.enqueue(sse({ type: 'chunk', chunk: JSON.parse(payload) }));
-            } catch {
-              // Ignore partial/invalid JSON frames.
-            }
-          }
-        }
-
+        if (!first.done) send(first.value.content);
+        for await (const part of iterator) send(part.content);
         controller.enqueue(sse({ type: 'done' }));
-        controller.close();
       } catch (error) {
         const details = describeOllamaFailure(error);
         console.error('API Route Error:', { error: 'OLLAMA stream error', details });
         controller.enqueue(sse({ type: 'error', error: 'OLLAMA API error: 500', details }));
-        controller.close();
       }
+      controller.close();
     },
   });
 
@@ -128,16 +107,10 @@ export async function POST(request: NextRequest) {
     if (provider === OLLAMA_PROVIDER) {
       try {
         if (stream) {
-          const upstream = await ollamaChatCompletion({
-            model,
-            messages,
-            stream: true,
-            parameters,
-          });
-          return streamOllama(upstream as Response);
+          return await streamOllama({ model, messages, parameters });
         }
 
-        const response = await ollamaChatCompletion({ model, messages, stream: false, parameters });
+        const response = await ollamaChatCompletion({ model, messages, parameters });
         return NextResponse.json(response);
       } catch (error) {
         const statusCode = (error as any)?.statusCode || 503;
