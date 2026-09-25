@@ -7,7 +7,10 @@ Agents share a file workspace rather than just a chat log. Each turn they write
 into it, and when the session ends one of them writes `DELIVERABLE.md`
 summarising what was decided and produced. You get files, not a transcript.
 
-![Next.js 15](https://img.shields.io/badge/Next.js-15-black) ![React 19](https://img.shields.io/badge/React-19-blue) ![Ollama](https://img.shields.io/badge/Ollama-local-green)
+**Free and open source.** Runs entirely on your own machine with local models — no account,
+no API key, no data leaving your computer unless you choose a hosted model.
+
+![Next.js 15](https://img.shields.io/badge/Next.js-15-black) ![React 19](https://img.shields.io/badge/React-19-blue) ![Ollama](https://img.shields.io/badge/Ollama-local-green) ![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-orange)
 
 ## Why it exists
 
@@ -157,3 +160,18 @@ forwarding a port.
 - Sessions live in each browser's local storage, so history on one device is
   separate from another. Configure Supabase (see `supabase/`) for shared history.
 - The host machine must be awake for remote access to work.
+
+## Contributing
+
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Found a security problem? Please follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
+
+## License
+
+AICollab is free software, licensed under the **GNU Affero General Public License v3.0 or later**
+([LICENSE](LICENSE)). You may use, study, modify and share it. If you run a modified version as a
+network service, you must offer its source code to that service's users.
+
+Model weights you pull through Ollama are **not** part of this project and carry their own licences
+(for example Qwen, Llama, Gemma, Mistral) — check them before commercial use.
+
