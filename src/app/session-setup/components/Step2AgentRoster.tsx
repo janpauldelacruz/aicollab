@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import Icon from '@/components/ui/AppIcon';
 import Modal from '@/components/ui/Modal';
 import type { AgentConfig, AgentRole, AgentModel, SessionMode } from './SessionSetupClient';
-import { useAvailableModels, modelBadge, FALLBACK_MODELS } from '@/lib/ai/models';
+import { useAvailableModels, modelBadge, FALLBACK_MODELS, firstCloudModel } from '@/lib/ai/models';
+import { CloudModelOptions, LockedProvidersHint } from '@/components/ui/CloudModelOptions';
 import { isRoleDefaultText, roleDefault } from '@/lib/ai/roleDefaults';
 import { distinctModels, pickSharedModel } from '@/lib/ai/multiAgentChat';
 
@@ -137,14 +138,17 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
   const [editingAgent, setEditingAgent] = useState<AgentConfig | null>(null);
   const {
     models: availableModels,
+    cloud,
     loading: modelsLoading,
     error: modelsError,
   } = useAvailableModels();
 
   // The suggested team and new agents use a model this host actually has, so a
   // fresh install with a single pulled model does not launch agents that 404.
+  // Without Ollama (a hosted deployment) that means a free hosted model.
   const installedDefault =
     (!modelsLoading && !modelsError && pickSharedModel(availableModels.map((m) => m.id))) ||
+    (!modelsLoading && modelsError && firstCloudModel(cloud)) ||
     DEFAULT_MODEL;
 
   const {
@@ -462,7 +466,8 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Hosted — needs an API key in .env">
+                <CloudModelOptions cloud={cloud} />
+                <optgroup label="Paid hosted — needs your own API key">
                   {CLOUD_MODELS.map((m) => (
                     <option key={`cloud-${m.value}`} value={m.value}>
                       {m.label} — {m.badge}
@@ -472,9 +477,11 @@ export default function Step2AgentRoster({ agents, mode, onChange, onBack, onNex
               </select>
               {modelsError && (
                 <p className="text-xs text-warning mt-1">
-                  Ollama unreachable — showing defaults. Start Ollama to list installed models.
+                  Ollama unreachable — showing defaults. Start Ollama to list installed models, or
+                  pick a free hosted model.
                 </p>
               )}
+              <LockedProvidersHint cloud={cloud} />
             </div>
           </div>
 

@@ -100,6 +100,39 @@ src/
 └── lib/session/           local persistence, export, live updates
 ```
 
+## Free hosted models
+
+No GPU, or running AICollab on a server? Agents can use free hosted models instead of Ollama. Every provider below has a free tier and needs only a free key; without Ollama the app picks the first model you have a key for.
+
+| Provider | Key | Free tier |
+|---|---|---|
+| Groq | [console.groq.com/keys](https://console.groq.com/keys) | free tier, very fast |
+| OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | every `:free` model |
+| Google Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | free tier |
+| Cerebras | [cloud.cerebras.ai](https://cloud.cerebras.ai) | free tier |
+| Mistral | [console.mistral.ai](https://console.mistral.ai/api-keys) | free Experiment plan |
+| GitHub Models | GitHub token with `models:read` | free |
+| Hugging Face | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) | monthly credits |
+| NVIDIA NIM | [build.nvidia.com](https://build.nvidia.com) | developer credits |
+| SambaNova | [cloud.sambanova.ai](https://cloud.sambanova.ai/apis) | free tier |
+| Cohere | [dashboard.cohere.com](https://dashboard.cohere.com/api-keys) | trial key |
+| Pollinations | [enter.pollinations.ai](https://enter.pollinations.ai/keys) | free daily allowance |
+
+Add a key on the **API Keys** page, or in `.env` to share it with everyone on your install, and that provider's models appear in every model picker. On a hosted site with no Ollama, set at least one key in `.env` (Groq takes a minute) or new visitors have nothing to run. Model lists are fetched live, so new free models show up without an update.
+
+## Google and GitHub sign-in
+
+With Supabase configured, the sign-in page offers Google and GitHub, which also create the account on first use.
+
+1. Run the migrations in `supabase/migrations/` — they create `user_profiles` and fill it for every new user, OAuth included.
+2. In Supabase: **Authentication → URL Configuration**, set Site URL to your domain and add `https://<your-domain>/auth/callback` to Redirect URLs.
+3. **Google**: in Google Cloud Console create an OAuth client (Web application) with redirect URI `https://<project-ref>.supabase.co/auth/v1/callback`. Paste its client ID and secret into Supabase → Authentication → Providers → Google.
+4. **GitHub**: create an OAuth App at github.com/settings/developers with the same callback URL. Paste its client ID and secret into Supabase → Providers → GitHub.
+
+## Signals
+
+`/signals` shows XAUUSD and BTCUSD buy / sell signals on M1, M5, M15, H1, H4 and D1, refreshed every 30 seconds from Kraken's free public data (gold via PAXG/USD, a spot-gold proxy). Each card shows entry, a 1.5 × ATR stop, 1R / 2R targets and a lot size for your equity and risk %. The rules are listed on the page; they are indicators, not financial advice.
+
 ## Running it for other people
 
 AICollab can run two ways.

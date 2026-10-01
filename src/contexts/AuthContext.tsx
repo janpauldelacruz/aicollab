@@ -85,6 +85,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return data;
   };
 
+  // Google / GitHub sign-in. The same call signs up a new user on first use.
+  // Supabase redirects to the provider, then back to /auth/callback.
+  const signInWithProvider = async (
+    provider: 'google' | 'github',
+    next = '/sessions-dashboard'
+  ) => {
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+    const { data, error } = await requireClient().auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    });
+    if (error) throw error;
+    return data;
+  };
+
   // Sign Out
   const signOut = async () => {
     const { error } = await requireClient().auth.signOut();
@@ -127,6 +142,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     loading,
     signUp,
     signIn,
+    signInWithProvider,
     signOut,
     getCurrentUser,
     isEmailVerified,
