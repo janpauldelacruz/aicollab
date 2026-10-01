@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Icon from '@/components/ui/AppIcon';
 import { useAuth } from '@/contexts/AuthContext';
+import { FREE_PROVIDERS, getFreeProvider } from '@/lib/ai/freeProviders';
 
 interface ApiKey {
   id: string;
@@ -20,17 +21,23 @@ interface AddKeyForm {
   rawKey: string;
 }
 
-const PROVIDERS = [
+/** Free-tier providers first: each one unlocks extra free models in the roster. */
+const FREE_KEY_PROVIDERS = FREE_PROVIDERS.filter((p) => p.keyRequired).map((p) => ({
+  id: p.id,
+  label: `${p.label} — free`,
+  icon: '🆓',
+  color: '#22c55e',
+}));
+
+const PAID_PROVIDERS = [
   { id: 'OPEN_AI', label: 'OpenAI', icon: '🤖', color: '#10a37f' },
   { id: 'ANTHROPIC', label: 'Anthropic', icon: '🧠', color: '#d97706' },
-  { id: 'GEMINI', label: 'Google Gemini', icon: '✨', color: '#4285f4' },
   { id: 'PERPLEXITY', label: 'Perplexity', icon: '🔍', color: '#8b5cf6' },
-  { id: 'MISTRAL', label: 'Mistral AI', icon: '🌊', color: '#f59e0b' },
-  { id: 'COHERE', label: 'Cohere', icon: '⚡', color: '#ef4444' },
   { id: 'TOGETHER', label: 'Together AI', icon: '🔗', color: '#06b6d4' },
-  { id: 'GROQ', label: 'Groq', icon: '🚀', color: '#f97316' },
   { id: 'CUSTOM', label: 'Custom / Other', icon: '🔑', color: '#6b7280' },
 ];
+
+const PROVIDERS = [...FREE_KEY_PROVIDERS, ...PAID_PROVIDERS];
 
 function maskKey(hint: string) {
   return hint || '••••••••••••••••';
@@ -50,7 +57,7 @@ export default function ApiKeysClient() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const [addForm, setAddForm] = useState<AddKeyForm>({
-    provider: 'OPEN_AI',
+    provider: FREE_KEY_PROVIDERS[0].id,
     label: '',
     rawKey: '',
   });
@@ -120,7 +127,7 @@ export default function ApiKeysClient() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.details || body.error || 'Failed to add key');
       setShowAddModal(false);
-      setAddForm({ provider: 'OPEN_AI', label: '', rawKey: '' });
+      setAddForm({ provider: FREE_KEY_PROVIDERS[0].id, label: '', rawKey: '' });
       await fetchKeys();
       showSuccess('API key added successfully');
     } catch (e: any) {
@@ -407,12 +414,35 @@ export default function ApiKeysClient() {
                   onChange={(e) => setAddForm((f) => ({ ...f, provider: e.target.value }))}
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
-                  {PROVIDERS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.icon} {p.label}
-                    </option>
-                  ))}
+                  <optgroup label="Free tier">
+                    {FREE_KEY_PROVIDERS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.icon} {p.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Paid">
+                    {PAID_PROVIDERS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.icon} {p.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
+                {getFreeProvider(addForm.provider) && (
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {getFreeProvider(addForm.provider)!.freeTier}. Get a free key at{' '}
+                    <a
+                      href={getFreeProvider(addForm.provider)!.signupUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {new URL(getFreeProvider(addForm.provider)!.signupUrl).hostname}
+                    </a>
+                    .
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">

@@ -80,8 +80,31 @@ export function modelBadge(model: ModelOption): string {
   return bits.length ? `Ollama · ${bits.join(' · ')}` : 'Ollama';
 }
 
+/** A free hosted provider as listed by /api/ai/models (see openaiCompat.ts). */
+export interface CloudProvider {
+  providerId: string;
+  label: string;
+  /** False when the provider needs a key the caller has not added yet. */
+  available: boolean;
+  keyRequired: boolean;
+  freeTier: string;
+  signupUrl: string;
+  live: boolean;
+  models: { id: string; label: string }[];
+}
+
+/** First usable free hosted model — what a roster falls back to without Ollama. */
+export function firstCloudModel(cloud: CloudProvider[]): string | null {
+  for (const p of cloud) {
+    if (p.available && p.models.length > 0) return p.models[0].id;
+  }
+  return null;
+}
+
 export interface UseAvailableModelsResult {
   models: ModelOption[];
+  /** Free hosted providers — usable ones and ones still waiting for a key. */
+  cloud: CloudProvider[];
   loading: boolean;
   /** Set when Ollama could not be reached; models falls back to FALLBACK_MODELS. */
   error: string | null;
@@ -89,9 +112,10 @@ export interface UseAvailableModelsResult {
   refresh: () => void;
 }
 
-/** Fetches the locally installed Ollama models for model pickers. */
+/** Fetches the local Ollama models and the free hosted providers for model pickers. */
 export function useAvailableModels(): UseAvailableModelsResult {
   const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
+  const [cloud, setCloud] = useState<CloudProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
@@ -110,6 +134,7 @@ export function useAvailableModels(): UseAvailableModelsResult {
         if (cancelled) return;
 
         setBaseUrl(data?.baseUrl ?? null);
+        setCloud(Array.isArray(data?.cloud) ? data.cloud : []);
 
         if (Array.isArray(data?.models) && data.models.length > 0) {
           setModels(data.models);
@@ -132,5 +157,5 @@ export function useAvailableModels(): UseAvailableModelsResult {
     };
   }, [nonce]);
 
-  return { models, loading, error, baseUrl, refresh };
+  return { models, cloud, loading, error, baseUrl, refresh };
 }

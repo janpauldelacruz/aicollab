@@ -36,7 +36,7 @@ import type {
   AgentResilienceState,
   OrchestrationMode,
 } from '@/lib/ai/multiAgentChat';
-import { useAvailableModels } from '@/lib/ai/models';
+import { useAvailableModels, firstCloudModel } from '@/lib/ai/models';
 import { resumableSession, saveSession } from '@/lib/session/sessionStore';
 import type { StoredSession } from '@/lib/session/sessionStore';
 
@@ -125,6 +125,7 @@ export default function LiveChatroomClient() {
   const [roster, setRoster] = useState<AIAgent[]>(REAL_AI_AGENTS);
   const {
     models: availableModels,
+    cloud,
     loading: modelsLoading,
     error: modelsError,
     baseUrl: ollamaBaseUrl,
@@ -273,11 +274,15 @@ export default function LiveChatroomClient() {
   }, []);
 
   // Point each agent at a model that is actually installed on the Ollama host
+  // — or, with no Ollama (a hosted deployment), at the first free hosted model.
   useEffect(() => {
-    if (availableModels.length === 0) return;
+    if (modelsLoading || availableModels.length === 0) return;
     // A launched roster already has explicit model choices — leave them alone.
     if (launchedRef.current) return;
-    const resolved = resolveAgentModels(availableModels.map((m) => m.id));
+    const cloudDefault = modelsError ? firstCloudModel(cloud) : null;
+    const resolved = resolveAgentModels(
+      cloudDefault ? [cloudDefault] : availableModels.map((m) => m.id)
+    );
     setRoster(resolved);
     setAgents((prev) =>
       prev.map((a) => {
@@ -285,7 +290,7 @@ export default function LiveChatroomClient() {
         return match ? { ...a, model: match.model } : a;
       })
     );
-  }, [availableModels, launchedConfig]);
+  }, [availableModels, cloud, modelsError, modelsLoading, launchedConfig]);
 
   // Timer
   useEffect(() => {
@@ -1068,6 +1073,10 @@ export default function LiveChatroomClient() {
                 <p className="text-xs font-mono mb-2">
                   {modelsLoading ? (
                     <span className="text-muted-foreground">Checking Ollama…</span>
+                  ) : modelsError && firstCloudModel(cloud) ? (
+                    <span className="text-positive">
+                      Using free hosted model {firstCloudModel(cloud)} — no Ollama needed
+                    </span>
                   ) : modelsError ? (
                     <span className="text-warning">
                       Ollama unreachable at {ollamaBaseUrl || 'localhost:11434'} — run &ldquo;ollama

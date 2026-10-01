@@ -10,6 +10,13 @@ import {
 import { guardAIRequest } from '@/lib/ai/guard';
 import { getAuthedUser } from '@/lib/supabase/server';
 import { getProviderKey } from '@/lib/supabase/keyVault';
+import { parseFreeModelId } from '@/lib/ai/freeProviders';
+import {
+  ProviderError,
+  compatChatCompletion,
+  compatChatStream,
+  resolveProviderKey,
+} from '@/lib/ai/openaiCompat';
 
 /**
  * Server-wide keys. These are a self-hosting convenience: on a shared
@@ -38,6 +45,49 @@ const encoder = new TextEncoder();
 
 function sse(payload: object): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+/**
+ * Wraps any async source of text deltas in the app's SSE envelope:
+ * {type:'start'} → {type:'chunk', chunk} → {type:'done'}. The first delta is
+ * pulled before the stream opens, so a bad key or missing model comes back as a
+ * normal JSON error with the right status instead of a broken stream.
+ */
+async function streamDeltas(
+  iterator: AsyncGenerator<string>,
+  label: string
+): Promise<NextResponse> {
+  const first = await iterator.next();
+
+  const readable = new ReadableStream({
+    async start(controller) {
+      const send = (content: string) => {
+        if (!content) return;
+        controller.enqueue(
+          sse({ type: 'chunk', chunk: { choices: [{ index: 0, delta: { content } }] } })
+        );
+      };
+      try {
+        controller.enqueue(sse({ type: 'start' }));
+        if (!first.done) send(first.value);
+        for await (const part of iterator) send(part);
+        controller.enqueue(sse({ type: 'done' }));
+      } catch (error) {
+        const details = error instanceof Error ? error.message : String(error);
+        console.error('API Route Error:', { error: `${label} stream error`, details });
+        controller.enqueue(sse({ type: 'error', error: `${label} API error: 500`, details }));
+      }
+      controller.close();
+    },
+  });
+
+  return new NextResponse(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  });
 }
 
 /**
@@ -101,6 +151,38 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // Free hosted providers ("@groq/…", "@openrouter/…", …): one OpenAI-compatible
+    // client for all of them. Routed by the model id, so it works whatever
+    // provider label an older client sends.
+    const free = parseFreeModelId(model);
+    if (free) {
+      const apiKey = await resolveProviderKey(free.provider);
+      if (free.provider.keyRequired && !apiKey) {
+        return NextResponse.json(
+          {
+            error: `No ${free.provider.label} key available`,
+            details: `Add a free ${free.provider.label} key on the API Keys page (get one at ${free.provider.signupUrl}), or pick a local Ollama model.`,
+          },
+          { status: 400 }
+        );
+      }
+      const args = { provider: free.provider, model: free.model, messages, parameters, apiKey };
+      try {
+        if (stream) {
+          return await streamDeltas(compatChatStream(args), free.provider.label.toUpperCase());
+        }
+        return NextResponse.json(await compatChatCompletion(args));
+      } catch (error) {
+        const statusCode = error instanceof ProviderError ? error.statusCode : 502;
+        const details = error instanceof Error ? error.message : String(error);
+        console.error('API Route Error:', { error: `${free.provider.id} error`, details });
+        return NextResponse.json(
+          { error: `${free.provider.label.toUpperCase()} API error: ${statusCode}`, details },
+          { status: statusCode }
+        );
+      }
     }
 
     // Local models: no API key, talk straight to the Ollama daemon.

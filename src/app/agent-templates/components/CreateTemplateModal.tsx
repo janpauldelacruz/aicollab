@@ -5,6 +5,7 @@ import Modal from '@/components/ui/Modal';
 import Icon from '@/components/ui/AppIcon';
 import type { AgentTemplate, AgentRole, AgentModel } from './AgentTemplatesClient';
 import { useAvailableModels, modelBadge, FALLBACK_MODELS } from '@/lib/ai/models';
+import { CloudModelOptions, LockedProvidersHint } from '@/components/ui/CloudModelOptions';
 import { isRoleDefaultText, roleDefault } from '@/lib/ai/roleDefaults';
 
 interface Props {
@@ -40,6 +41,7 @@ interface FormData {
 export default function CreateTemplateModal({ open, onClose, onCreate }: Props) {
   const {
     models: availableModels,
+    cloud,
     loading: modelsLoading,
     error: modelsError,
   } = useAvailableModels();
@@ -144,15 +146,19 @@ export default function CreateTemplateModal({ open, onClose, onCreate }: Props) 
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Model</label>
             <select className="input-base" {...register('model')} disabled={modelsLoading}>
-              {availableModels.map((m) => (
-                <option key={`create-model-${m.id}`} value={m.id}>
-                  {m.label} — {modelBadge(m)}
-                </option>
-              ))}
+              <optgroup label="Local — Ollama (no API key)">
+                {availableModels.map((m) => (
+                  <option key={`create-model-${m.id}`} value={m.id}>
+                    {m.label} — {modelBadge(m)}
+                  </option>
+                ))}
+              </optgroup>
+              <CloudModelOptions cloud={cloud} />
             </select>
             {modelsError && (
               <p className="text-xs text-warning mt-1">Ollama unreachable — showing defaults.</p>
             )}
+            <LockedProvidersHint cloud={cloud} />
           </div>
         </div>
 

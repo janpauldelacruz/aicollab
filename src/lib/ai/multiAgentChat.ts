@@ -1,9 +1,12 @@
 import { getChatCompletion } from './chatCompletion';
+import { parseFreeModelId } from './freeProviders';
 import { coveredGround } from './collaboration';
 import { DELIVERABLE_FILE, renderWorkspaceForPrompt } from './workspace';
 import type { Workspace } from './workspace';
 
-export type AIProvider = 'OLLAMA' | 'ANTHROPIC' | 'GEMINI' | 'OPEN_AI' | 'PERPLEXITY';
+/** Built-in providers, plus any free provider id from freeProviders.ts. */
+export type AIProvider =
+  'OLLAMA' | 'ANTHROPIC' | 'GEMINI' | 'OPEN_AI' | 'PERPLEXITY' | (string & {});
 
 /** How turns are ordered across the roster. */
 export type OrchestrationMode = 'round-robin' | 'parallel' | 'sequential' | 'priority' | 'reactive';
@@ -68,6 +71,9 @@ export interface AgentExecutionResult {
  * that provider instead, which needs its API key set in .env.
  */
 export function inferProvider(model: string): AIProvider {
+  // Free hosted models carry their provider in the id: "@groq/llama-3.3-70b".
+  const free = parseFreeModelId(model);
+  if (free) return free.provider.id;
   const m = model.toLowerCase();
   if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('text-'))
     return 'OPEN_AI';
