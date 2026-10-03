@@ -120,14 +120,18 @@ No GPU, or running AICollab on a server? Agents can use free hosted models inste
 
 Add a key on the **API Keys** page, or in `.env` to share it with everyone on your install, and that provider's models appear in every model picker. On a hosted site with no Ollama, set at least one key in `.env` (Groq takes a minute) or new visitors have nothing to run. Model lists are fetched live, so new free models show up without an update.
 
-## Google and GitHub sign-in
+## Accounts: sign up, sign in, forgot password
 
-With Supabase configured, the sign-in page offers Google and GitHub, which also create the account on first use.
+With Supabase configured, the sign-in page offers email + password accounts.
 
-1. Run the migrations in `supabase/migrations/` — they create `user_profiles` and fill it for every new user, OAuth included.
-2. In Supabase: **Authentication → URL Configuration**, set Site URL to your domain and add `https://<your-domain>/auth/callback` to Redirect URLs.
-3. **Google**: in Google Cloud Console create an OAuth client (Web application) with redirect URI `https://<project-ref>.supabase.co/auth/v1/callback`. Paste its client ID and secret into Supabase → Authentication → Providers → Google.
-4. **GitHub**: create an OAuth App at github.com/settings/developers with the same callback URL. Paste its client ID and secret into Supabase → Providers → GitHub.
+- **Create Account** makes the account. If Supabase has *Confirm email* on, the user gets a confirmation link first; otherwise they are signed straight in.
+- **Forgot password?** emails a reset link. It opens `/reset-password`, where the user sets a new password and is signed in.
+
+Setup, once per Supabase project:
+
+1. Run the migrations in `supabase/migrations/` — they create `user_profiles` and fill it for every new user.
+2. **Authentication → URL Configuration**: set Site URL to your domain and add `https://<your-domain>/auth/callback` to Redirect URLs.
+3. **Authentication → SMTP**: Supabase's built-in mailer only delivers to your own team's addresses and a few emails an hour. For real users, add an SMTP provider (Resend, Brevo, SendGrid and others have free tiers) so confirmation and reset emails arrive.
 
 ## Signals
 

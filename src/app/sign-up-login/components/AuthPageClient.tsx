@@ -26,9 +26,14 @@ interface SignupForm {
 }
 
 export default function AuthPageClient() {
-  const { signIn, signUp, signInWithProvider } = useAuth();
-  const [oauthPending, setOauthPending] = useState<'google' | 'github' | null>(null);
+  const { signIn, signUp, requestPasswordReset } = useAuth();
   const [tab, setTab] = useState<AuthTab>('login');
+  // Inside the Sign In tab: the normal form, or the forgot-password form.
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSentTo, setResetSentTo] = useState<string | null>(null);
+  // Set after sign-up when Supabase requires the email to be confirmed first.
+  const [confirmSentTo, setConfirmSentTo] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -41,70 +46,8 @@ export default function AuthPageClient() {
     if (target && target.startsWith('/') && !target.startsWith('//')) setNextPath(target);
     // /auth/callback sends failures back here.
     const authError = params.get('auth_error');
-    if (authError) toast.error(`Sign-in failed: ${authError}`);
+    if (authError) toast.error(`That link did not work: ${authError}. Request a new one.`);
   }, []);
-
-  const handleOAuth = async (provider: 'google' | 'github') => {
-    if (!isSupabaseConfigured) {
-      toast.error('Google and GitHub sign-in need Supabase configured in .env.');
-      return;
-    }
-    setOauthPending(provider);
-    try {
-      // Navigates away to the provider on success.
-      await signInWithProvider(provider, nextPath);
-    } catch (err: any) {
-      setOauthPending(null);
-      const message = err?.message || 'Could not start sign-in';
-      toast.error(
-        /not enabled|unsupported provider/i.test(message)
-          ? `${provider === 'google' ? 'Google' : 'GitHub'} sign-in is not enabled in Supabase yet (Authentication → Providers).`
-          : message
-      );
-    }
-  };
-
-  const oauthButtons = (
-    <div className="grid grid-cols-2 gap-3 pt-2">
-      {(['google', 'github'] as const).map((p) => (
-        <button
-          key={`oauth-${p}`}
-          type="button"
-          onClick={() => handleOAuth(p)}
-          disabled={oauthPending !== null}
-          className="btn-secondary gap-2 text-xs"
-        >
-          {oauthPending === p ? (
-            <Icon name="ArrowPathIcon" size={15} className="animate-spin" />
-          ) : p === 'google' ? (
-            <svg width="15" height="15" viewBox="0 0 48 48" aria-hidden="true">
-              <path
-                fill="#FFC107"
-                d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"
-              />
-              <path
-                fill="#FF3D00"
-                d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"
-              />
-              <path
-                fill="#4CAF50"
-                d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"
-              />
-              <path
-                fill="#1976D2"
-                d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"
-              />
-            </svg>
-          ) : (
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-            </svg>
-          )}
-          {p === 'google' ? 'Google' : 'GitHub'}
-        </button>
-      ))}
-    </div>
-  );
 
   const loginForm = useForm<LoginForm>({
     defaultValues: { email: '', password: '', remember: false },
@@ -121,8 +64,13 @@ export default function AuthPageClient() {
       router.push(nextPath);
       router.refresh();
     } catch (err: any) {
+      const message: string = err?.message || '';
       loginForm.setError('email', {
-        message: err?.message || 'Could not sign in — check your email and password',
+        message: /email not confirmed/i.test(message)
+          ? 'Confirm your email first — check your inbox for the confirmation link.'
+          : /invalid login credentials/i.test(message)
+            ? 'Wrong email or password.'
+            : message || 'Could not sign in — check your email and password',
       });
     } finally {
       setIsLoading(false);
@@ -137,15 +85,55 @@ export default function AuthPageClient() {
       return;
     }
     try {
-      await signUp(data.email, data.password, { fullName: data.name });
-      // Supabase may require email confirmation before a session exists.
-      toast.success('Account created — check your email if confirmation is required.');
+      const result = await signUp(data.email, data.password, { fullName: data.name });
+      // Supabase returns a user that has no identities when the email is
+      // already registered (it does not say so, to avoid leaking accounts).
+      if (
+        result?.user &&
+        Array.isArray(result.user.identities) &&
+        result.user.identities.length === 0
+      ) {
+        signupForm.setError('email', {
+          message: 'An account with this email already exists — sign in or reset your password.',
+        });
+        return;
+      }
+      if (!result?.session) {
+        // Email confirmation is on: there is no session until the link is clicked.
+        setConfirmSentTo(data.email);
+        signupForm.reset();
+        return;
+      }
+      toast.success('Account created — welcome to AICollab!');
       router.push(nextPath);
       router.refresh();
     } catch (err: any) {
       signupForm.setError('email', {
         message: err?.message || 'Could not create the account',
       });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = resetEmail.trim();
+    if (!email) {
+      toast.error('Enter the email you signed up with.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await requestPasswordReset(email);
+      setResetSentTo(email);
+    } catch (err: any) {
+      const message: string = err?.message || 'Could not send the reset email';
+      toast.error(
+        /rate limit|security purposes/i.test(message)
+          ? 'Too many reset requests — wait a minute and try again.'
+          : message
+      );
     } finally {
       setIsLoading(false);
     }
@@ -230,7 +218,11 @@ export default function AuthPageClient() {
             {(['login', 'signup'] as AuthTab[]).map((t) => (
               <button
                 key={`tab-${t}`}
-                onClick={() => setTab(t)}
+                onClick={() => {
+                  setTab(t);
+                  setForgotMode(false);
+                  setConfirmSentTo(null);
+                }}
                 className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   tab === t
                     ? 'bg-card text-foreground shadow-sm'
@@ -256,22 +248,84 @@ export default function AuthPageClient() {
             </div>
           )}
 
-          {tab === 'login' ? (
+          {tab === 'login' && forgotMode ? (
+            resetSentTo ? (
+              <div className="space-y-4">
+                <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Icon name="EnvelopeIcon" size={20} className="text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">Check your email</h2>
+                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                    If an account exists for{' '}
+                    <span className="text-foreground font-medium">{resetSentTo}</span>, a link to
+                    set a new password is on its way. Open it in this browser. It can take a minute
+                    — check spam too.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setResetSentTo(null)}
+                  className="btn-secondary w-full py-2.5"
+                >
+                  Send it again
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForgotMode(false)}
+                  className="w-full text-xs text-primary hover:underline"
+                >
+                  Back to sign in
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgot} className="space-y-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">Reset your password</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Enter your account email and we&apos;ll send you a link to set a new password.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">
+                    Email address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    autoFocus
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className="input-base"
+                  />
+                </div>
+                <button type="submit" disabled={isLoading} className="btn-primary w-full py-2.5">
+                  {isLoading ? (
+                    <>
+                      <Icon name="ArrowPathIcon" size={16} className="animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    'Send reset link'
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForgotMode(false)}
+                  className="w-full text-xs text-primary hover:underline"
+                >
+                  Back to sign in
+                </button>
+              </form>
+            )
+          ) : tab === 'login' ? (
             <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
               <div>
                 <h2 className="text-xl font-semibold text-foreground">Welcome back</h2>
                 <p className="text-sm text-muted-foreground mt-1">
                   Sign in to your AICollab workspace
                 </p>
-              </div>
-
-              {/* OAuth — signs in, or creates the account on first use */}
-              {oauthButtons}
-
-              <div className="flex items-center gap-3">
-                <hr className="flex-1 border-border" />
-                <span className="text-xs text-muted-foreground">or</span>
-                <hr className="flex-1 border-border" />
               </div>
 
               {/* Email */}
@@ -296,9 +350,17 @@ export default function AuthPageClient() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-foreground">Password</label>
-                  <span className="text-xs text-primary cursor-pointer hover:underline">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetEmail(loginForm.getValues('email'));
+                      setResetSentTo(null);
+                      setForgotMode(true);
+                    }}
+                    className="text-xs text-primary hover:underline"
+                  >
                     Forgot password?
-                  </span>
+                  </button>
                 </div>
                 <div className="relative">
                   <input
@@ -346,6 +408,31 @@ export default function AuthPageClient() {
                 )}
               </button>
             </form>
+          ) : confirmSentTo ? (
+            <div className="space-y-4">
+              <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center">
+                <Icon name="EnvelopeIcon" size={20} className="text-primary" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-foreground">Confirm your email</h2>
+                <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                  Your account is created. We sent a confirmation link to{' '}
+                  <span className="text-foreground font-medium">{confirmSentTo}</span> — click it to
+                  finish signing up, then sign in. Check spam if it doesn&apos;t show up.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmSentTo(null);
+                  setTab('login');
+                  loginForm.setValue('email', confirmSentTo);
+                }}
+                className="btn-primary w-full py-2.5"
+              >
+                Go to sign in
+              </button>
+            </div>
           ) : (
             <form onSubmit={signupForm.handleSubmit(handleSignup)} className="space-y-4">
               <div>
@@ -353,15 +440,6 @@ export default function AuthPageClient() {
                 <p className="text-sm text-muted-foreground mt-1">
                   Start collaborating with AI agents today
                 </p>
-              </div>
-
-              {/* OAuth — signs in, or creates the account on first use */}
-              {oauthButtons}
-
-              <div className="flex items-center gap-3">
-                <hr className="flex-1 border-border" />
-                <span className="text-xs text-muted-foreground">or</span>
-                <hr className="flex-1 border-border" />
               </div>
 
               <div>

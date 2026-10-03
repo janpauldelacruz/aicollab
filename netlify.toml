@@ -1,0 +1,7 @@
+# Public Supabase settings for the hosted app. Both values are shipped to every
+# browser anyway (NEXT_PUBLIC_*), so they are safe to keep in the repo. Secrets
+# such as ENCRYPTION_KEY and AI provider keys go in Netlify's environment
+# variables UI, never here.
+[build.environment]
+  NEXT_PUBLIC_SUPABASE_URL = "https://thzzaefvvktwnlkljxlh.supabase.co"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRoenphZWZ2dmt0d25sa2xqeGxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNjcyNjQsImV4cCI6MjA5NjY0MzI2NH0.w6eWiWa1T6ihYoIVjPdS2oUpD1CK2bw2xHM6RRgDeg0"
