@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  */
 
 /** Reachable without a session. Everything else requires one. */
-const PUBLIC_PATHS = ['/sign-up-login', '/auth', '/shared', '/signals'];
+const PUBLIC_PATHS = ['/sign-up-login', '/reset-password', '/auth', '/shared', '/signals'];
 
 function isPublic(pathname: string): boolean {
   if (pathname === '/') return true;

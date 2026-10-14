@@ -68,7 +68,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           full_name: metadata?.fullName || '',
           avatar_url: metadata?.avatarUrl || '',
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // Confirmation link signs the user in via /auth/callback.
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/sessions-dashboard')}`,
       },
     });
     if (error) throw error;
@@ -85,19 +86,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return data;
   };
 
-  // Google / GitHub sign-in. The same call signs up a new user on first use.
-  // Supabase redirects to the provider, then back to /auth/callback.
-  const signInWithProvider = async (
-    provider: 'google' | 'github',
-    next = '/sessions-dashboard'
-  ) => {
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-    const { data, error } = await requireClient().auth.signInWithOAuth({
-      provider,
-      options: { redirectTo },
-    });
+  // Forgot password: emails a one-time link. The link lands on /auth/callback,
+  // which signs the user in and continues to /reset-password.
+  const requestPasswordReset = async (email: string) => {
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/reset-password')}`;
+    const { error } = await requireClient().auth.resetPasswordForEmail(email, { redirectTo });
     if (error) throw error;
-    return data;
+  };
+
+  // Sets a new password for the signed-in user (used by /reset-password).
+  const updatePassword = async (password: string) => {
+    const { error } = await requireClient().auth.updateUser({ password });
+    if (error) throw error;
   };
 
   // Sign Out
@@ -142,7 +142,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     loading,
     signUp,
     signIn,
-    signInWithProvider,
+    requestPasswordReset,
+    updatePassword,
     signOut,
     getCurrentUser,
     isEmailVerified,
